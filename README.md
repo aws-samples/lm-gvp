@@ -1,4 +1,4 @@
-## My Project
+## LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure
 
 TODO: Fill this README out!
 
