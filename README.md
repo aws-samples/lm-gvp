@@ -1,11 +1,16 @@
-## LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure
+# LM-GVP: 
 
-TODO: Fill this README out!
+Source code for "LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure"
+<img src="figs/lmgvp.png">
 
-Be sure to:
+## Dependencies
 
-* Change the title in this README
-* Edit your repository description on GitHub
+LM-GVP experiments were performed in Python 3.6 with Pytorch (v1.8). 
+
+To install all dependencies run:
+```
+pip install -r requirements.txt
+```
 
 ## Security
 
