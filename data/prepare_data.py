@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 Parse PDB files to extract the coordinates of the 4 key atoms from AAs to
 generate json records compatible to the LM-GVP model.
