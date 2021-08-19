@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 Prase structure files downloaded from RCSB for the GO dataset from the
 DeepFRI paper.

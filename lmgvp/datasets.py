@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 Pytorch map style dataset classes for proteins (seq, struct, seq+struct).
 Modified from https://github.com/drorlab/gvp-pytorch/blob/main/gvp/data.py

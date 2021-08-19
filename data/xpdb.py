@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 PDB parsers for large files with Biopython.
 Modified from https://biopython.org/wiki/Reading_large_PDB_files

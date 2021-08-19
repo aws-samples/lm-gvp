@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """Train and score few-shot L1-logit model predicting contacts using
 self-attention maps.
 """

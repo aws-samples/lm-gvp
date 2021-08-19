@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """Modified from https://github.com/flatironinstitute/DeepFRI/blob/fa9409cca7dc7b475f71ab4bab0aa7b6b1091448/deepfrier/utils.py"""
 import csv
 import numpy as np

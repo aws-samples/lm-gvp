@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 """
 Train seq-only, struct-only or seq+struct model on Fluores, protease or GO
 datasets using Pytorch-lightning.
