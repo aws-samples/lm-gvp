@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 """
-pl.LightningModules for LM-GVP and other baseline models.
+pl.LightningModules for LM-GVP and other baseline models, modified to support model interpretation
 """
 from typing import Tuple
 import torch
@@ -403,6 +403,7 @@ class BertMQAModel(BaseModule):
             "freeze_layer_count",
             "residual",
         )
+        self.identity = nn.Identity()
         self.bert_model = BertModel.from_pretrained("Rostlab/prot_bert")
         self.embeding_dim = self.bert_model.pooler.dense.out_features
         self.residual = residual
@@ -467,13 +468,13 @@ class BertMQAModel(BaseModule):
         self.log("{}_loss".format(prefix), loss)
         return loss
 
-    def forward(self, batch):
+    def forward(self, batch, input_ids=None):
         """batch: (torch_geometric.data.Data, targets)"""
         x, targets = batch
-        logits = self._forward(x)
+        logits = self._forward(x, input_ids=input_ids)
         return logits
 
-    def _forward(self, batch):
+    def _forward(self, batch, input_ids=None):
         """
         batch: torch_geometric.data.Data
         """
@@ -482,12 +483,16 @@ class BertMQAModel(BaseModule):
         edge_index = batch.edge_index
 
         batch_size = batch.num_graphs
-        input_ids = batch.input_ids.reshape(batch_size, -1)
+        
+        if input_ids is None:
+            input_ids = batch.input_ids.reshape(batch_size, -1)
         attention_mask = batch.attention_mask.reshape(batch_size, -1)
 
         node_embeddings = _bert_forward(
             self.bert_model, self.embeding_dim, input_ids, attention_mask
         )
+        node_embeddings = self.identity(node_embeddings)
+        
         h_V = (torch.cat([h_V[0], node_embeddings], dim=-1), h_V[1])
 
         h_V = self.W_v(h_V)
