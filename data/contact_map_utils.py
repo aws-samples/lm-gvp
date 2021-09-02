@@ -4,6 +4,7 @@
 """
 Helpers for parsing protein structure files and generating contact maps.
 """
+
 import gzip
 import numpy as np
 import pandas as pd
@@ -17,17 +18,13 @@ from Bio.PDB.Polypeptide import three_to_one, is_aa
 def idx_align(pdb_seq: str, og_seq: str):
     """Maps indices of original and PDB sequences to mutual alignment
     Args:
-        - pdb_seq:
-            Sequence of amino acids as extracted from PDB file
-        - og_seq:
-            Original sequence of amino acids
+        pdb_seq: Sequence of amino acids as extracted from PDB file
+        og_seq: Original sequence of amino acids
     Returns:
-        - pdb_idxs : list
-            List of integers containing the indices in the PDB sequence
-            for which aligned information is available
-        - og_idxs : list
-            List of integers containing the indices in the original sequence
-            for which aligned information is available
+        Tuple where the first element is a list of integers containing the indices in 
+        the PDB sequence for which aligned information is available and the second element 
+        is a list of integers containing the indices in the original sequence
+        for which aligned information is available
     """
     alignment = pairwise2.align.globalxx(Seq(og_seq), Seq(pdb_seq))[0]
     og_seq_align = alignment.seqA
@@ -57,17 +54,11 @@ def idx_align(pdb_seq: str, og_seq: str):
 def calc_adj_matrix(structure, dist_thresh=10.0):
     """Returns an adjacency matrix for a PDB structure
     Args:
-        - structure : BioPython PDB Structure object
-            Structure representing a protein containing N residues
-        - dist_thresh : float, optional
-            Value specifying threshold for classifying contacts between
-            residues
+        structure : BioPython PDB Structure object representing a protein containing N residues
+        dist_thresh : float, optional. Value specifying threshold for classifying contacts between residues
+
     Returns:
-        np.ndarray
-            NxN adjacency matrix, where N is the number of residues in
-            `structure`
-        np.ndarray
-            NxN matrix specifying distances between residues
+        Tuple where the first element is a np.ndarray adjacency matrix with shape NxN, where N is the number of residues in `structure` and the second element is np.ndarray NxN matrix specifying distances between residues.
     """
     residues = list(structure.get_residues())
     coords = np.asarray([residue["CA"].coord for residue in residues])
@@ -78,6 +69,12 @@ def calc_adj_matrix(structure, dist_thresh=10.0):
 def gunzip_to_ram(gzip_file_path):
     """
     gunzip a gzip file and decode it to a io.StringIO object.
+
+    Args:
+        gzip_file_path: String. Gunzip filepath.
+
+    Returns:
+        io.StringIO object. 
     """
     content = []
     with gzip.open(gzip_file_path, "rb") as f:
@@ -90,7 +87,17 @@ def gunzip_to_ram(gzip_file_path):
 
 def _parse_structure(parser, name, file_path):
     """Parse a .pdb or .cif file into a structure object.
-    The file can be gzipped."""
+    The file can be gzipped.
+    
+    Args:
+        parser: # TODO
+        name: # TODO
+        file_path: String. Filpath of the pdb or cif file to be read.
+
+    Retruns:
+        #TODO [Kind of object] representing the protein structure.
+
+    """
     if pd.isnull(file_path):
         return None
     if file_path.endswith(".gz"):
@@ -105,7 +112,17 @@ parse_pdb_structure = _parse_structure  # for backward compatiblity
 
 def parse_structure(pdb_parser, cif_parser, name, file_path):
     """Parse a .pdb file or .cif file into a structure object.
-    The file can be gzipped."""
+    The file can be gzipped.
+    
+    Args:
+        pdb_parser: # TODO
+        cif_parser: # TODO
+        name: # TODO
+        file_path: String. Filpath of the pdb or cif file to be read.
+
+    Return:
+        #TODO [Kind of object] representing the protein structure.
+    """
     if file_path.rstrip(".gz").endswith("pdb"):
         return _parse_structure(pdb_parser, name, file_path)
     else:
@@ -113,7 +130,15 @@ def parse_structure(pdb_parser, cif_parser, name, file_path):
 
 
 def get_energy(pdb_file_path):
-    """Get total pose energy from a PDB file"""
+    """Get total pose energy from a PDB file.
+    
+    Args:
+        pdb_file_path: String. Path to the pdb file.
+
+    Return:
+        Energy score.
+
+    """
     if pdb_file_path.endswith(".pdb.gz"):
         pdb_file = gunzip_to_ram(pdb_file_path)
     else:
@@ -130,14 +155,28 @@ def get_energy(pdb_file_path):
 
 
 def three_to_one_standard(res):
-    """Encode non-standard AA to X."""
+    """Encode non-standard AA to X.
+    
+    Args:
+        res: # TODO [kind of object] representing the residue.
+
+    Return:
+        # TODO
+    """
     if not is_aa(res, standard=True):
         return "X"
     return three_to_one(res)
 
 
 def is_aa_by_target_atoms(res):
-    """Tell if a Residue object is AA"""
+    """Tell if a Residue object is AA
+    
+    Args:
+        res: # TODO [kind of object] representing the residue.
+
+    Return:
+       Bool. Wheather or not the residue is AA.  
+    """
     target_atoms = ["N", "CA", "C", "O"]
     for atom in target_atoms:
         try:

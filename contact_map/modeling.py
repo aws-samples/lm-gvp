@@ -4,6 +4,7 @@
 """Train and score few-shot L1-logit model predicting contacts using
 self-attention maps.
 """
+
 from sklearn.linear_model import LogisticRegression
 import pickle
 from sklearn import metrics
@@ -11,9 +12,13 @@ from sklearn import metrics
 
 def train_logistic_regression(X, y):
     """Train a l1-logit classifier on dataset.
+    
     Args:
-        - X: np.array of shape [n_samples, n_features]
-        - y: np.array of shape [n_samples, ]
+        X: np.array of shape [n_samples, n_features]
+        y: np.array of shape [n_samples, ]
+
+    Returns:
+        Trained sklear Logistic Regression model instance
     """
     l1_logit = LogisticRegression(
         penalty="l1", solver="saga", C=0.15, random_state=42, n_jobs=-1
@@ -23,10 +28,27 @@ def train_logistic_regression(X, y):
 
 
 def save_logistic_regression(model, fp):
+    """Save sklearn logistic regression model
+    
+    Args:
+        model: Model instnace to be stored.
+        fp: String specifying the filepath where the model will be stored.
+    
+    Returns:
+        None
+    """
     pickle.dump(model, open(fp, "wb"))
 
 
 def load_logistic_regression(fp):
+    """Load sklearn logistic regression model
+    
+    Args:
+        fp: String specifying the filepath where the model will be stored.
+    
+    Returns:
+        Loaded model instnace.
+    """
     l1_logit = pickle.load(open(fp, "rb"))
     return l1_logit
 
@@ -34,10 +56,15 @@ def load_logistic_regression(fp):
 def compute_scores(model, X, y):
     """
     Compute average scores: precision score and average precision score.
+    
     Args:
-        - model: trained l1-logit classifier
-        - X: np.array of shape [n_samples, n_features]
-        - y: np.array of shape [n_samples, ]
+        model: trained l1-logit classifier
+        X: np.array of shape [n_samples, n_features]
+        y: np.array of shape [n_samples, ]
+    
+    Returns:
+        Tuple whith the precision score in the first elemnt and the average precision score in the second element. 
+
     """
     y_hat_prob = model.predict_proba(X)
     y_hat = model.predict(X)

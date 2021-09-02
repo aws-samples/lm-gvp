@@ -70,12 +70,16 @@ def init_model(
     **kwargs
 ):
     """Initialize a model.
+    
     Args:
-        - datum: a Data object to determine input shapes for GVP-based models.
-        - model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat',
-            'bert_gat']
-        - num_outputs: number of output units
-        - weights: label weights for multi-output models
+        datum: a Data object to determine input shapes for GVP-based models.
+        model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']
+        num_outputs: number of output units
+        weights: label weights for multi-output models
+
+    Returns:
+        model object (One of: bert, gat, bert_gat, gvp or bert_gvp)
+
     """
     print("Init {} model with args:".format(model_name))
     pprint(kwargs)
@@ -109,7 +113,17 @@ def init_model(
 
 
 def evaluate(model, data_loader, task):
-    """Evaluate model on dataset and return metrics."""
+    """Evaluate model on dataset and return metrics.
+    
+    Args:
+        datum: a Data object to determine input shapes for GVP-based models.
+        model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']
+        num_outputs: number of output units
+        weights: label weights for multi-output models
+
+    Returns:
+        model object (One of: bert, gat, bert_gat, gvp or bert_gvp)
+    """
     # make predictions on test set
     device = torch.device("cuda:0")
     model = model.to(device)
@@ -152,6 +166,15 @@ def evaluate(model, data_loader, task):
 
 
 def main(args):
+    """
+    Load data, train and evaluate model and save scores. Configuration in the args object.
+
+    Args:
+        args: Parsed command line arguments. Must include: pytorchlighting pre-defined args, task, node_h_dim_s, node_h_dim_v, edge_h_dim_s, edge_h_dim_v, pretrained_weights, ls, bs, early_stopping_patience, num_workers.
+
+    Returns:
+        None
+    """
     pl.seed_everything(42, workers=True)
     # 1. Load data
     train_dataset = data_loaders.get_dataset(
@@ -241,7 +264,7 @@ def main(args):
         scores,
         open(os.path.join(trainer.log_dir, "scores.json"), "w"),
     )
-    return
+    return None
 
 
 if __name__ == "__main__":

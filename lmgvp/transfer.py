@@ -10,6 +10,14 @@ from torch.nn.parameter import Parameter
 def load_state_dict_to_model(model, state_dict):
     """Initialize a model with parameters in `state_dict` (inplace)
     from a pretrained model with slightly different architecture.
+
+    Args:
+        model: Torch model
+        state_dict: Dictionary containing weight for each layer of the `model`
+
+    Returns:
+        input `model` where layer weights have been updated based on `state_dict`
+
     """
     own_state = model.state_dict()
     print("model own state keys:", len(own_state))

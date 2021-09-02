@@ -13,6 +13,14 @@ from Bio.PDB.PDBParser import PDBParser
 
 
 def load_predicted_PDB(pdbfile):
+    """
+    Loads a pdb file and returns the sequence and the distance between residues.
+
+    Args:
+        pdbfile: String representing the path to the pdb file.
+    Returns
+        Tuple where the first elemnent is the sequence [#TODO please confirm] and the second is a matrix representing the distances between residues.
+    """
     # Generate (diagonalized) C_alpha distance matrix from a pdbfile
     parser = PDBParser()
     structure = parser.get_structure(
@@ -35,6 +43,14 @@ def load_predicted_PDB(pdbfile):
 
 
 def load_FASTA(filename):
+    """
+    Loads a FASTA file and returns the protein ids and their sequences.
+
+    Args:
+        filename: String representing the path to the FASTA file.
+    Returns
+        Tuple where the first elemnent is a list of protein ids and the second element is a list of protein sequences.
+    """
     # Loads fasta file and returns a list of the Bio SeqIO records
     infile = open(filename, "rU")
     entries = []
@@ -46,6 +62,14 @@ def load_FASTA(filename):
 
 
 def load_GO_annot(filename):
+    """
+    Loads the GO annotations.
+
+    Args:
+        filename: String representing the path to the GO annotations file.
+    Returns
+        Quatruple where elements are 1/ .... 2/.... 3/ ... 4/.... #TODO
+    """
     # Load GO annotations
     onts = ["mf", "bp", "cc"]
     prot2annot = {}
@@ -92,6 +116,14 @@ def load_GO_annot(filename):
 
 
 def load_EC_annot(filename):
+    """
+    Loads the EC annotations.
+
+    Args:
+        filename: String representing the path to the EC annotations file.
+    Returns
+        Quatruple where elements are 1/ .... 2/.... 3/ ... 4/.... #TODO
+    """
     # Load EC annotations """
     prot2annot = {}
     with open(filename, mode="r") as tsvfile:
@@ -117,7 +149,15 @@ def load_EC_annot(filename):
 
 
 def norm_adj(A, symm=True):
-    #  Normalize adj matrix
+    """
+    Normalize adj matrix
+
+    Args:
+        A: numpy array representing the adjacency matrix to be normalized.
+        symm: Boolean representing if the adjacency matrix is symmetric (i.e. undirected graph)
+    Returns
+        Numpy array representing the normalized adjacency matrix.
+    """
     A += np.eye(A.shape[1])
     if symm:
         d = 1.0 / np.sqrt(A.sum(axis=1))
@@ -129,6 +169,15 @@ def norm_adj(A, symm=True):
 
 
 def _micro_aupr(y_true, y_test):
+    """
+    Computes the micro AUPR
+
+    Args:
+        y_true: array with the GT observations.
+        y_test: array with the predictions.
+    Returns
+        float representing the micro aupr score
+    """
     return metrics.average_precision_score(y_true, y_test, average="micro")
 
 
@@ -138,11 +187,14 @@ def compute_f1_score_at_threshold(
     """Calculate protein-centric F1 score based on DeepFRI's description.
     ref: https://www.nature.com/articles/nmeth.2340
     Online method -> Evaluation metrics
+    
     Args:
-        - y_true: [n_proteins, n_functions], binary matrix of ground truth
-            labels
-        - y_pred: [n_proteins, n_functions], probabilities from model
-            predictions after sigmoid.
+        y_true: [n_proteins, n_functions], binary matrix of ground truth labels
+        y_pred: [n_proteins, n_functions], probabilities from model predictions after sigmoid.
+        t: Float representing the threshold to use to compute the f1 score.
+
+    Returns:
+        float representing the f1 score
     """
     n_proteins = y_true.shape[0]
     y_pred_bin = y_pred >= t  # binarize predictions
@@ -169,10 +221,12 @@ def evaluate_multilabel(
     ref: https://www.nature.com/articles/nmeth.2340
     Online method -> Evaluation metrics
     Args:
-        - y_true: [n_proteins, n_functions], binary matrix of ground truth
-            labels
-        - y_pred: [n_proteins, n_functions], logits from model predictions
-        - n_thresholds (int): number of thresholds to estimate F_max
+        y_true: [n_proteins, n_functions], binary matrix of ground truth labels
+        y_pred: [n_proteins, n_functions], logits from model predictions
+        n_thresholds (int): number of thresholds to estimate F_max
+
+    Returns:
+        Tuple where the first element is the F1 score and the second element is the micro AUPR
     """
     # function-centric AUPR
     micro_aupr = _micro_aupr(y_true, y_pred)
