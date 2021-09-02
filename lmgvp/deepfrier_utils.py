@@ -12,36 +12,6 @@ from Bio import SeqIO
 from Bio.PDB.PDBParser import PDBParser
 
 
-def load_predicted_PDB(pdbfile):
-    """
-    Loads a pdb file and returns the sequence and the distance between residues.
-
-    Args:
-        pdbfile: String representing the path to the pdb file.
-    Returns
-        Tuple where the first elemnent is the sequence [#TODO please confirm] and the second is a matrix representing the distances between residues.
-    """
-    # Generate (diagonalized) C_alpha distance matrix from a pdbfile
-    parser = PDBParser()
-    structure = parser.get_structure(
-        pdbfile.split("/")[-1].split(".")[0], pdbfile
-    )
-    residues = [r for r in structure.get_residues()]
-
-    # sequence from atom lines
-    records = SeqIO.parse(pdbfile, "pdb-atom")
-    seqs = [str(r.seq) for r in records]
-
-    distances = np.empty((len(residues), len(residues)))
-    for x in range(len(residues)):
-        for y in range(len(residues)):
-            one = residues[x]["CA"].get_coord()
-            two = residues[y]["CA"].get_coord()
-            distances[x, y] = np.linalg.norm(one - two)
-
-    return distances, seqs[0]
-
-
 def load_FASTA(filename):
     """
     Loads a FASTA file and returns the protein ids and their sequences.
@@ -68,7 +38,11 @@ def load_GO_annot(filename):
     Args:
         filename: String representing the path to the GO annotations file.
     Returns
-        Quatruple where elements are 1/ .... 2/.... 3/ ... 4/.... #TODO
+        Quatruple where elements are
+            1/ a dict of dict with protein annotations: {protein: {'cc': np.array([...])}}
+            2/ a dict with metadata of GO terms: {'cc': [goterm1, ...]}
+            3/ a dict with metadata of GO names: {'cc': [goname1, ...]}
+            4/ a dict with protein counts of GO terms: {'cc': np.array(...)}
     """
     # Load GO annotations
     onts = ["mf", "bp", "cc"]
@@ -115,39 +89,6 @@ def load_GO_annot(filename):
     return prot2annot, goterms, gonames, counts
 
 
-def load_EC_annot(filename):
-    """
-    Loads the EC annotations.
-
-    Args:
-        filename: String representing the path to the EC annotations file.
-    Returns
-        Quatruple where elements are 1/ .... 2/.... 3/ ... 4/.... #TODO
-    """
-    # Load EC annotations """
-    prot2annot = {}
-    with open(filename, mode="r") as tsvfile:
-        reader = csv.reader(tsvfile, delimiter="\t")
-
-        # molecular function
-        next(reader, None)  # skip the headers
-        ec_numbers = {"ec": next(reader)}
-        next(reader, None)  # skip the headers
-        counts = {"ec": np.zeros(len(ec_numbers["ec"]), dtype=float)}
-        for row in reader:
-            prot, prot_ec_numbers = row[0], row[1]
-            ec_indices = [
-                ec_numbers["ec"].index(ec_num)
-                for ec_num in prot_ec_numbers.split(",")
-            ]
-            prot2annot[prot] = {
-                "ec": np.zeros(len(ec_numbers["ec"]), dtype=np.int64)
-            }
-            prot2annot[prot]["ec"][ec_indices] = 1.0
-            counts["ec"][ec_indices] += 1
-    return prot2annot, ec_numbers, ec_numbers, counts
-
-
 def norm_adj(A, symm=True):
     """
     Normalize adj matrix
@@ -187,7 +128,7 @@ def compute_f1_score_at_threshold(
     """Calculate protein-centric F1 score based on DeepFRI's description.
     ref: https://www.nature.com/articles/nmeth.2340
     Online method -> Evaluation metrics
-    
+
     Args:
         y_true: [n_proteins, n_functions], binary matrix of ground truth labels
         y_pred: [n_proteins, n_functions], probabilities from model predictions after sigmoid.

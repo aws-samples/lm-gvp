@@ -70,7 +70,7 @@ def init_model(
     **kwargs
 ):
     """Initialize a model.
-    
+
     Args:
         datum: a Data object to determine input shapes for GVP-based models.
         model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']
@@ -114,7 +114,7 @@ def init_model(
 
 def evaluate(model, data_loader, task):
     """Evaluate model on dataset and return metrics.
-    
+
     Args:
         datum: a Data object to determine input shapes for GVP-based models.
         model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']

@@ -13,23 +13,7 @@ from Bio.PDB.Residue import Residue
 
 
 class SloppyStructureBuilder(Bio.PDB.StructureBuilder.StructureBuilder):
-    """Cope with resSeq < 10,000 limitation by just incrementing internally.
-    # TODO -- resolve
-
-    # Q: What's wrong here??
-    #   Some atoms or residues will be missing in the data structure.
-    #   WARNING: Residue (' ', 8954, ' ') redefined at line 74803.
-    #   PDBConstructionException: Blank altlocs in duplicate residue SOL
-    #   (' ', 8954, ' ') at line 74803.
-    #
-    # A: resSeq only goes to 9999 --> goes back to 0 (PDB format is not really
-    #    good here)
-
-    """
-
-    # NOTE/TODO:
-    # - H and W records are probably not handled yet (don't have examples
-    #   to test)
+    """Cope with resSeq < 10,000 limitation by just incrementing internally."""
 
     def __init__(self, verbose=False):
         Bio.PDB.StructureBuilder.StructureBuilder.__init__(self)

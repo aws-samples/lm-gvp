@@ -31,11 +31,11 @@ OUTPUT_DIR = "/home/ec2-user/SageMaker/efs/gvp-datasets/DeepFRI_GO"
 
 def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
     """Extract the coordinates of the target_atoms from an AA residue.
-    Handles exception where residue doesn't contain certain atoms 
+    Handles exception where residue doesn't contain certain atoms
     by setting coordinates to np.nan
 
     Args:
-        residue: #TODO [object type]. 
+        residue: a Bio.PDB.Residue object.
         target_atoms: Target atoms which residues will be resturned.
 
     Returns:
@@ -54,14 +54,14 @@ def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
 def chain_to_coords(chain, target_atoms=["N", "CA", "C", "O"], name=""):
     """Convert a PDB chain in to coordinates of target atoms from all
     AAs
-    
+
     Args:
-        chain: #TODO
+        chain: a Bio.PDB.Chain object
         target_atoms: Target atoms which residues will be resturned.
-        name: #TODO
+        name: String. Name of the protein.
     Returns:
         Dictonary containing protein sequence `seq`, 3D coordinates `coord` and name `name`.
-        
+
     """
     output = {}
     # get AA sequence in the pdb structure
@@ -94,16 +94,16 @@ def parse_structure_file_to_json_record(
 ):
     """Parse a protein structure file (.pdb or .cif) to extract all the chains
     to json records for LM-GVP model.
-    
+
     Args:
-        pdb_parser: #TODO [object type] to parse the PDB files.
-        cif_parser: #TODO [object type] to parse the CIF files.
-        sequence: #TODO [object type] representing the protein sequence
+        pdb_parser: a Bio.PDB.PDBParser instance to parse the PDB files.
+        cif_parser: a Bio.PDB.MMCIFParser instance to parse the CIF files.
+        sequence: String representing the protein sequence
         pdb_file_path: String. Path to the PDB file.
-        name: # TODO
-    
+        name: String. Name of the protein.
+
     Returns:
-        List of [#TODO] records
+        List of parsed protein chain records (Dictonary containing protein sequence `seq`, 3D coordinates `coord` and name `name`.)
     """
 
     try:
@@ -127,8 +127,7 @@ def parse_structure_file_to_json_record(
         return records
 
 
-
-if __name__=='__main__':
+if __name__ == "__main__":
 
     # 0. Prepare structure parser
     # PDB parser
@@ -187,11 +186,14 @@ if __name__=='__main__':
         records = [rec for rec in records if rec["name"] in chains_for_split]
 
         # check if there is any chains missing
-        missed_chains = chains_for_split - set([rec["name"] for rec in records])
+        missed_chains = chains_for_split - set(
+            [rec["name"] for rec in records]
+        )
         if len(missed_chains) > 0:
             print("Missing chains:", len(missed_chains))
 
         # write to json file
         json.dump(
-            records, open(os.path.join(OUTPUT_DIR, f"proteins_{split}.json"), "w")
+            records,
+            open(os.path.join(OUTPUT_DIR, f"proteins_{split}.json"), "w"),
         )

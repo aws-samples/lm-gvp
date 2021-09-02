@@ -56,9 +56,9 @@ def parse_args():
 
 def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
     """Extract the coordinates of the target_atoms from an AA residue.
-    
+
     Args:
-        residue: # TODO [kind of object] representing the residue.
+        residue: a Bio.PDB.Residue object representing the residue.
         target_atoms: Target atoms which residues will be returned.
 
     Retruns:
@@ -69,11 +69,11 @@ def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
 
 def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
     """Convert a PDB structure in to coordinates of target atoms from all AAs
-    
+
     Args:
-        struct: #TODO [structure object] representing the protein structure
+        struct: a Bio.PDB.Structure object representing the protein structure
         target_atoms: Target atoms which residues will be returned.
-        name: String. #TODO
+        name: String. Name of the structure
 
     Return:
         Dictionary with the pdb sequence, atom 3D coordinates and name.
@@ -101,13 +101,13 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
     Reads and reformats a pdb strcuture into a dictionary.
 
     Args:
-        parser: #TODO
-        sequence: #TODO
+        parser: a Bio.PDB.PDBParser or Bio.PDB.MMCIFParser instance.
+        sequence: String. Sequence of the structure.
         pdb_file_path: String. Path to the pdb file.
-        name: #TODO
+        name: String. Name of the protein.
 
     Return:
-
+        Dictionary with the pdb sequence, atom 3D coordinates and name.
     """
     struct = parse_pdb_structure(parser, sequence, pdb_file_path)
     record = structure_to_coords(struct, name=name)
@@ -116,7 +116,7 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
 
 def main():
     """
-    Data preparation main script: Load data, parses PDB, processes structures, seggregate records and write to disk. Configuration via commandline arguments.
+    Data preparation main script: Load data, parses PDB, processes structures, segregate records and write to disk. Configuration via commandline arguments.
 
     Args:
 
@@ -159,7 +159,7 @@ def main():
         print(split, "number of proteins:", len(records))
         outfile = os.path.join(args.output, f"proteins_{split}.json")
         json.dump(records, open(outfile, "w"))
-    
+
     return None
 
 

@@ -21,8 +21,8 @@ def idx_align(pdb_seq: str, og_seq: str):
         pdb_seq: Sequence of amino acids as extracted from PDB file
         og_seq: Original sequence of amino acids
     Returns:
-        Tuple where the first element is a list of integers containing the indices in 
-        the PDB sequence for which aligned information is available and the second element 
+        Tuple where the first element is a list of integers containing the indices in
+        the PDB sequence for which aligned information is available and the second element
         is a list of integers containing the indices in the original sequence
         for which aligned information is available
     """
@@ -74,7 +74,7 @@ def gunzip_to_ram(gzip_file_path):
         gzip_file_path: String. Gunzip filepath.
 
     Returns:
-        io.StringIO object. 
+        io.StringIO object.
     """
     content = []
     with gzip.open(gzip_file_path, "rb") as f:
@@ -88,14 +88,14 @@ def gunzip_to_ram(gzip_file_path):
 def _parse_structure(parser, name, file_path):
     """Parse a .pdb or .cif file into a structure object.
     The file can be gzipped.
-    
+
     Args:
-        parser: # TODO
-        name: # TODO
+        parser: a Bio.PDB.PDBParser or Bio.PDB.MMCIFParser instance.
+        name: String. name of protein
         file_path: String. Filpath of the pdb or cif file to be read.
 
     Retruns:
-        #TODO [Kind of object] representing the protein structure.
+        a Bio.PDB.Structure object representing the protein structure.
 
     """
     if pd.isnull(file_path):
@@ -113,15 +113,15 @@ parse_pdb_structure = _parse_structure  # for backward compatiblity
 def parse_structure(pdb_parser, cif_parser, name, file_path):
     """Parse a .pdb file or .cif file into a structure object.
     The file can be gzipped.
-    
+
     Args:
-        pdb_parser: # TODO
-        cif_parser: # TODO
-        name: # TODO
+        pdb_parser: a Bio.PDB.PDBParser instance
+        cif_parser: Bio.PDB.MMCIFParser instance
+        name: String. name of protein
         file_path: String. Filpath of the pdb or cif file to be read.
 
     Return:
-        #TODO [Kind of object] representing the protein structure.
+        a Bio.PDB.Structure object representing the protein structure.
     """
     if file_path.rstrip(".gz").endswith("pdb"):
         return _parse_structure(pdb_parser, name, file_path)
@@ -131,7 +131,7 @@ def parse_structure(pdb_parser, cif_parser, name, file_path):
 
 def get_energy(pdb_file_path):
     """Get total pose energy from a PDB file.
-    
+
     Args:
         pdb_file_path: String. Path to the pdb file.
 
@@ -156,12 +156,12 @@ def get_energy(pdb_file_path):
 
 def three_to_one_standard(res):
     """Encode non-standard AA to X.
-    
+
     Args:
-        res: # TODO [kind of object] representing the residue.
+        res: a Bio.PDB.Residue object representing the residue.
 
     Return:
-        # TODO
+        String. One letter code of the residue.
     """
     if not is_aa(res, standard=True):
         return "X"
@@ -170,12 +170,12 @@ def three_to_one_standard(res):
 
 def is_aa_by_target_atoms(res):
     """Tell if a Residue object is AA
-    
+
     Args:
-        res: # TODO [kind of object] representing the residue.
+        res: a Bio.PDB.Residue object representing the residue.
 
     Return:
-       Bool. Wheather or not the residue is AA.  
+       Bool. Wheather or not the residue is AA.
     """
     target_atoms = ["N", "CA", "C", "O"]
     for atom in target_atoms:

@@ -22,7 +22,7 @@ def _bert_forward(
     attention_masks=None,
 ):
     """Forward pass throught BERT to get token-level embeddings
-    
+
     Args:
         bert_model: HuggingFace bert model
         embeding_dim: Dimension of the embeddings
@@ -30,7 +30,7 @@ def _bert_forward(
         attention_masks: Mask to be used for Bert attention
 
     Returns:
-        Output token-level embeddings 
+        Output token-level embeddings
     """
     # skip [CLS] and [SEP]
     node_embeddings = bert_model(
@@ -48,7 +48,7 @@ def _freeze_bert(
     bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
 ):
     """Freeze parameters in BertModel (in place)
-    
+
     Args:
         bert_model: HuggingFace bert model
         freeze_bert: Bool whether or not to freeze the bert model
@@ -77,7 +77,7 @@ class BaseModule(pl.LightningModule):
     """A generic pl.LightningModule with the following functionalities:
     - save hyperparams
     - compute loss based on problem types from flags `classify`, `multiclass`
-    
+
     """
 
     def __init__(
@@ -88,15 +88,15 @@ class BaseModule(pl.LightningModule):
         weights=None,
         **kwargs,
     ):
-        """    
-        
+        """
+
         Args:
-            num_outputs: number of output units to enable multi-task problems #NOTE: note used! 
+            num_outputs: number of output units to enable multi-task problems
             classify: if True: classification; else: regression problem
             multiclass: if True, multiclass; else: multi-label
             weights: a tensor of class weights
 
-        Returns:    
+        Returns:
             None
 
         """
@@ -122,8 +122,8 @@ class BaseModule(pl.LightningModule):
         return parent_parser
 
     def configure_optimizers(self):
-        """ Initialize optimizer
-        
+        """Initialize optimizer
+
         Args:
             None
 
@@ -141,7 +141,7 @@ class BaseModule(pl.LightningModule):
         Args:
             logits: Predicted logits
             targets: Ground truth
-            
+
         Returns:
             loss
         """
@@ -162,15 +162,15 @@ class BaseModule(pl.LightningModule):
     def _step(self, batch, batch_idx, prefix="train"):
         """Will be used in train/validation loop, independent of `forward`.
         To be implemented by child classes
-        
+
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
-        
+
         Returns:
             Loss
-        
+
         """
         raise NotImplementedError
 
@@ -182,12 +182,11 @@ class BaseModule(pl.LightningModule):
 
 
 class BertFinetuneModel(BaseModule):
-    """Sequence-only baseline: Bert + linear layer on pooler_output
-    """
+    """Sequence-only baseline: Bert + linear layer on pooler_output"""
 
     def __init__(self, **kwargs):
         """Initializes the module
-        
+
         Args:
             None
 
@@ -210,7 +209,7 @@ class BertFinetuneModel(BaseModule):
             batch: torch_geometric.data.Data
             input_ids: IDs of the embeddings to be used in the model.
             attention_mask: Masking to use durinig BERT's self-attention.
-        
+
         Returns:
             logits
         """
@@ -225,7 +224,7 @@ class BertFinetuneModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-        
+
         Returns:
             logits
         """
@@ -237,7 +236,7 @@ class BertFinetuneModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
 
         Returns:
@@ -276,7 +275,7 @@ class MQAModel(BaseModule):
             num_layers: number of GVP-GNN layers
             drop_rate: rate to use in all dropout layers
             residual: whether to have residual connections among GNN layers
-        
+
         Returns:
             None
         """
@@ -347,7 +346,7 @@ class MQAModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
 
         Returns:
@@ -364,7 +363,7 @@ class MQAModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-        
+
         Returns:
             logits
         """
@@ -416,8 +415,7 @@ class MQAModel(BaseModule):
 
 
 class GATModel(BaseModule):
-    """GAT structure-only model.
-    """
+    """GAT structure-only model."""
 
     def __init__(
         self,
@@ -461,7 +459,7 @@ class GATModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
 
         Returns:
@@ -478,7 +476,7 @@ class GATModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-        
+
         Returns:
             logits
         """
@@ -548,7 +546,7 @@ class BertMQAModel(BaseModule):
             residual: whether to have residual connections among GNN layers
             freeze_bert: wheter to freeze the entire bert model
             freeze_layer_count: number of bert.embedding layers to freeze.
-            
+
         Returns:
             None
         """
@@ -636,7 +634,7 @@ class BertMQAModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
         Returns:
             Loss
@@ -653,7 +651,7 @@ class BertMQAModel(BaseModule):
         Args:
             batch: (torch_geometric.data.Data, targets)
             input_ids: IDs of the embeddings to be used in the model.
-        
+
         Returns:
             logits
         """
@@ -676,7 +674,7 @@ class BertMQAModel(BaseModule):
         edge_index = batch.edge_index
 
         batch_size = batch.num_graphs
-        
+
         if input_ids is None:
             input_ids = batch.input_ids.reshape(batch_size, -1)
         attention_mask = batch.attention_mask.reshape(batch_size, -1)
@@ -685,7 +683,7 @@ class BertMQAModel(BaseModule):
             self.bert_model, self.embeding_dim, input_ids, attention_mask
         )
         node_embeddings = self.identity(node_embeddings)
-        
+
         h_V = (torch.cat([h_V[0], node_embeddings], dim=-1), h_V[1])
 
         h_V = self.W_v(h_V)
@@ -712,8 +710,7 @@ class BertMQAModel(BaseModule):
 
 
 class BertGATModel(BaseModule):
-    """Bert + GAT head.
-    """
+    """Bert + GAT head."""
 
     def __init__(
         self,
@@ -791,9 +788,9 @@ class BertGATModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-            batch_idx: #NOTE: Not used!
+            batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
-        
+
         Returns:
             Loss
         """
@@ -808,7 +805,7 @@ class BertGATModel(BaseModule):
 
         Args:
             batch: (torch_geometric.data.Data, targets)
-        
+
         Returns:
             Inferenced logits
         """
@@ -821,10 +818,10 @@ class BertGATModel(BaseModule):
 
         Args:
             batch: torch_geometric.data.Data
-            
+
         Returns:
             Inferenced logits
-        
+
         """
         edge_index = batch.edge_index
         batch_size = batch.num_graphs

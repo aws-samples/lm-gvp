@@ -13,6 +13,7 @@ import torch.utils.data as data
 import torch.nn.functional as F
 import torch_geometric
 import torch_cluster
+from lmgvp.utils import prep_seq
 
 
 def _normalize(tensor, dim=-1):
@@ -22,7 +23,7 @@ def _normalize(tensor, dim=-1):
     Args:
         tensor: Torch tensor to be normalized.
         dim: Integer. Dimension to normalize across.
-    
+
     Returns:
         Normalized tensor with zeros instead of nan's or infinity values.
 
@@ -43,10 +44,10 @@ def _rbf(D, D_min=0.0, D_max=20.0, D_count=16, device="cpu"):
 
     Args:
         D: generic torch tensor
-        D_min: Float. Minimum of the sequence of numbers created. 
+        D_min: Float. Minimum of the sequence of numbers created.
         D_max: Float. Max of the sequence of numbers created.
-        D_count: Positive integer. Count of the numbers in the sequence. It is also lenght of the new dimension (-1) created in D. 
-        device: Device where D is stored. 
+        D_count: Positive integer. Count of the numbers in the sequence. It is also lenght of the new dimension (-1) created in D.
+        device: Device where D is stored.
 
     Return:
         Input `D` matrix with an RBF embedding along axis -1.
@@ -61,9 +62,7 @@ def _rbf(D, D_min=0.0, D_max=20.0, D_count=16, device="cpu"):
 
 
 class BaseProteinGraphDataset(data.Dataset):
-    """Dataset for the Base Protein Graph.
-    """
-
+    """Dataset for the Base Protein Graph."""
 
     def __init__(
         self,
@@ -80,8 +79,8 @@ class BaseProteinGraphDataset(data.Dataset):
         Args:
             data_list: List containint the initial dataset
             num_positional_embeddings: Integer specifying the number of positional embeddings.
-            top_k: #TODO
-            num_rbf: #TODO
+            top_k: Integer k to use in kNN when constructing the graph
+            num_rbf: Integer specifying number of radial basis functions
             device: Device to allocate the tensors.
             preprocess: Whether to preprocess the data_list.
 
@@ -118,9 +117,9 @@ class BaseProteinGraphDataset(data.Dataset):
 
     def _featurize_as_graph(self, protein):
         """Placeholder for the _featurize_as_graph method implemented in child classes.
-        
+
         Args:
-            protein: #TODO
+            protein: a dict representing a data object
 
         Returns:
             None
@@ -128,14 +127,14 @@ class BaseProteinGraphDataset(data.Dataset):
         raise NotImplementedError
 
     def _dihedrals(self, X, eps=1e-7):
-        """#TODO
-        
+        """Compute sines and cosines dihedral angles (phi, psi, and omega)
+
         Args:
-            X: #TODO
-            eps: Float defining the epsilo using to clamp the angle between normals: min= -1*eps, max=1-eps
+            X: torch.Tensor specifying coordinates of key atoms (N, CA, C, O) in 3D space with shape [seq_len, 4, 3]
+            eps: Float defining the epsilon using to clamp the angle between normals: min= -1*eps, max=1-eps
 
         Returns:
-            #TODO
+            Sines and cosines dihedral angles as a torch.Tensor of shape [seq_len, 6]
         """
         # From https://github.com/jingraham/neurips19-graph-protein-design
 
@@ -162,15 +161,12 @@ class BaseProteinGraphDataset(data.Dataset):
         D_features = torch.cat([torch.cos(D), torch.sin(D)], 1)
         return D_features
 
-    def _positional_embeddings(
-        self, edge_index, num_embeddings=None, period_range=[2, 1000]
-    ):
-        """ Creates and returns the positional embeddings.
-        
+    def _positional_embeddings(self, edge_index, num_embeddings=None):
+        """Creates and returns the positional embeddings.
+
         Args:
-            edge_index: #TODO
+            edge_index: torch.Tensor representing edges in COO format with shape [2, num_edges].
             num_embeddings: Integer representing the number of embeddings.
-            period_range: #NOTE: Not used, please correct. 
 
         Returns:
             Positional embeddings as a torch tensor
@@ -190,13 +186,13 @@ class BaseProteinGraphDataset(data.Dataset):
         return E
 
     def _orientations(self, X):
-        """ #TODO
-        
+        """Compute orientations between pairs of atoms from neighboring residues.
+
         Args:
-            X: #TODO
+            X: torch.Tensor representing atom coordinates with shape [n_atoms, 3]
 
         Returns:
-            Torch tensor representing #TODO
+            torch.Tensor atom pair orientations
         """
         forward = _normalize(X[1:] - X[:-1])
         backward = _normalize(X[:-1] - X[1:])
@@ -205,13 +201,13 @@ class BaseProteinGraphDataset(data.Dataset):
         return torch.cat([forward.unsqueeze(-2), backward.unsqueeze(-2)], -2)
 
     def _sidechains(self, X):
-        """ #TODO
-        
+        """Compute the unit vector representing the imputed side chain directions (C_beta - C_alpha).
+
         Args:
-            X: #TODO
+            X: torch.Tensor specifying coordinates of key atoms (N, CA, C, O) in 3D space with shape [seq_len, 4, 3]
 
         Returns:
-            Torch tensor representing #TODO
+            Torch tensor representing side chain directions with shape [seq_len, 3]
         """
         n, origin, c = X[:, 0], X[:, 1], X[:, 2]
         c, n = _normalize(c - origin), _normalize(n - origin)
@@ -265,7 +261,7 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
 
     def _featurize_as_graph(self, protein):
         """Featurizes the protein information as a graph for the GNN
-        
+
         Args:
             protein: Dictionary with the protein seq, coord and name.
 
@@ -362,7 +358,7 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
 
     def _featurize_as_graph(self, protein):
         """Featurizes the protein information as a graph for the GNN
-        
+
         Args:
             protein: Dictionary with the protein seq, coord and name.
 
@@ -420,3 +416,145 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             mask=mask,
         )
         return data
+
+
+# dataset classes with targets:
+class SequenceDatasetWithTarget(data.Dataset):
+    """Intended for all sequence-only models."""
+
+    def __init__(self, sequences, labels, tokenizer=None, preprocess=True):
+        """Initializes the dataset
+        Args:
+            sequences: list of strings
+            labels: tensor of labels [n_samples, n_labels]
+            tokenizer: BertTokenizer
+            preprocess: Bool. Wheather or not to process the sequences.
+
+        Return:
+            None
+        """
+        self.sequences = sequences
+        self.labels = labels
+        self.tokenizer = tokenizer
+        if preprocess:
+            self._preprocess()
+
+    def _preprocess(self):
+        """Preprocess sequences to input_ids and attention_mask
+
+        Args:
+
+        Return:
+            None
+        """
+        print("Preprocessing seqeuence data...")
+        self.sequences = [prep_seq(seq) for seq in self.sequences]
+        encodings = self.tokenizer(
+            self.sequences, return_tensors="pt", padding=True
+        )
+        self.encodings = {
+            key: val
+            for key, val in encodings.items()
+            if key in ("input_ids", "attention_mask")
+        }
+
+    def __getitem__(self, idx):
+        """Retrieve protein information by index.
+
+        Args:
+            idx: Integer representing the position of the protein.
+
+        Return:
+            Dictionary with `input_ids`, `attention_mask` and `labels`
+        """
+        return {
+            "input_ids": self.encodings["input_ids"][idx],
+            "attention_mask": self.encodings["attention_mask"][idx],
+            "labels": self.labels[idx],
+        }
+
+    def __len__(self):
+        """Lenght of the dataset.
+
+        Args:
+
+        Return:
+            Integer representing the length of the dataset.
+        """
+        return len(self.sequences)
+
+
+class ProteinGraphDatasetWithTarget(StandardProteinGraphDataset):
+    """Thin wrapper for ProteinGraphDataset to include targets.
+    Intended for all (structure-only) GNN models."""
+
+    def __init__(self, data_list, **kwargs):
+        super(ProteinGraphDatasetWithTarget, self).__init__(
+            data_list, **kwargs
+        )
+
+    def __getitem__(self, i):
+        if not isinstance(self.data_list[i], tuple):
+            self.data_list[i] = (
+                self._featurize_as_graph(self.data_list[i]),
+                self.data_list[i]["target"],
+            )
+        return self.data_list[i]
+
+    def _preprocess(self):
+        """Preprocess all the records in `data_list` with
+        `_featurize_as_graph`"""
+        for i in tqdm.tqdm(range(len(self.data_list))):
+            self.data_list[i] = (
+                self._featurize_as_graph(self.data_list[i]),
+                self.data_list[i]["target"],
+            )
+
+
+class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
+    """Thin wrapper for ProteinGraphDataset to include targets.
+    Intended for all BERT+GNN models"""
+
+    def __init__(self, data_list, **kwargs):
+        """Initializes the dataset
+
+        Args:
+            data_list: a list of data records (dicts with `input_ids`, `attention_mask`, `target`)
+
+        Return:
+            None
+        """
+        super(BertProteinGraphDatasetWithTarget, self).__init__(
+            data_list, **kwargs
+        )
+
+    def __getitem__(self, idx):
+        """Retrieve protein information by index.
+
+        Args:
+            idx: Integer representing the position of the protein.
+
+        Return:
+            None
+        """
+        if not isinstance(self.data_list[idx], tuple):
+            self.data_list[idx] = (
+                self._featurize_as_graph(self.data_list[idx]),
+                self.data_list[idx]["target"],
+            )
+        return self.data_list[idx]
+
+    def _preprocess(self):
+        """Preprocess all the records in `data_list` with
+        `_featurize_as_graph`. Directly modifies self.data_list
+
+        Args:
+
+        Returns:
+            None
+        """
+        for i in tqdm.tqdm(range(len(self.data_list))):
+            self.data_list[i] = (
+                self._featurize_as_graph(self.data_list[i]),
+                self.data_list[i]["target"],
+            )
