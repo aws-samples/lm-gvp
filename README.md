@@ -70,8 +70,8 @@ Scripts and utilility functions used for preparing protein sequence and structur
 Datasets used in this study are from publicly available resources:
 - [GO datasets](https://github.com/flatironinstitute/DeepFRI/tree/master/preprocessing/data)
 - [TAPE](https://github.com/songlab-cal/tape) datasets:
-  * [Fluorescence](s3://songlabdata/proteindata/data_pytorch/fluorescence.tar.gz)
-  * [Protease stability](s3://songlabdata/proteindata/data_pytorch/stability.tar.gz)
+  * Fluorescence: s3://songlabdata/proteindata/data_pytorch/fluorescence.tar.gz
+  * Protease stability: s3://songlabdata/proteindata/data_pytorch/stability.tar.gz
 
 ## Model interpretation and mechanistic analyses
 
