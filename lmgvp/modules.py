@@ -21,7 +21,17 @@ def _bert_forward(
     input_ids=None,
     attention_masks=None,
 ):
-    """Forward pass throught BERT to get token-level embeddings"""
+    """Forward pass throught BERT to get token-level embeddings
+    
+    Args:
+        bert_model: HuggingFace bert model
+        embeding_dim: Dimension of the embeddings
+        input_ids: indexes of the input sequence
+        attention_masks: Mask to be used for Bert attention
+
+    Returns:
+        Output token-level embeddings 
+    """
     # skip [CLS] and [SEP]
     node_embeddings = bert_model(
         input_ids, attention_mask=attention_masks
@@ -37,7 +47,16 @@ def _bert_forward(
 def _freeze_bert(
     bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
 ):
-    """Freeze parameters in BertModel (in place)"""
+    """Freeze parameters in BertModel (in place)
+    
+    Args:
+        bert_model: HuggingFace bert model
+        freeze_bert: Bool whether or not to freeze the bert model
+        freeze_layer_count: If freeze_bert, up to what layer to freeze.
+
+    Returns:
+        bert_model
+    """
     if freeze_bert:
         # freeze the entire bert model
         for param in bert_model.parameters():
@@ -51,18 +70,14 @@ def _freeze_bert(
             for layer in bert_model.encoder.layer[:freeze_layer_count]:
                 for param in layer.parameters():
                     param.requires_grad = False
-    return
+    return None
 
 
 class BaseModule(pl.LightningModule):
     """A generic pl.LightningModule with the following functionalities:
     - save hyperparams
     - compute loss based on problem types from flags `classify`, `multiclass`
-    Args:
-        - num_outputs: number of output units to enable multi-task problems
-        - classify: if True: classification; else: regression problem
-        - multiclass: if True, multiclass; else: multi-label
-        - weights: a tensor of class weights
+    
     """
 
     def __init__(
@@ -73,6 +88,18 @@ class BaseModule(pl.LightningModule):
         weights=None,
         **kwargs,
     ):
+        """    
+        
+        Args:
+            num_outputs: number of output units to enable multi-task problems #NOTE: note used! 
+            classify: if True: classification; else: regression problem
+            multiclass: if True, multiclass; else: multi-label
+            weights: a tensor of class weights
+
+        Returns:    
+            None
+
+        """
         super(BaseModule, self).__init__()
         self.save_hyperparameters(
             "num_outputs", "lr", "classify", "multiclass"
@@ -83,15 +110,41 @@ class BaseModule(pl.LightningModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        """Adds model specific args to the base/parent parser.
+
+        Args:
+            parent_parser: Base/parent parser
+
+        Returns:
+            parent parser with additional model-specific args
+
+        """
         return parent_parser
 
     def configure_optimizers(self):
+        """ Initialize optimizer
+        
+        Args:
+            None
+
+        Returns:
+            None
+
+        """
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
 
     def _compute_loss(self, logits, targets):
         """Compute x-ent or MSE loss based on `classify` and `multiclass`
-        flags."""
+        flags.
+
+        Args:
+            logits: Predicted logits
+            targets: Ground truth
+            
+        Returns:
+            loss
+        """
         if self.classify:
             if self.multiclass:
                 # single-label multiclass
@@ -109,6 +162,15 @@ class BaseModule(pl.LightningModule):
     def _step(self, batch, batch_idx, prefix="train"):
         """Will be used in train/validation loop, independent of `forward`.
         To be implemented by child classes
+        
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+        
+        Returns:
+            Loss
+        
         """
         raise NotImplementedError
 
@@ -120,9 +182,18 @@ class BaseModule(pl.LightningModule):
 
 
 class BertFinetuneModel(BaseModule):
-    """Sequence-only baseline: Bert + linear layer on pooler_output"""
+    """Sequence-only baseline: Bert + linear layer on pooler_output
+    """
 
     def __init__(self, **kwargs):
+        """Initializes the module
+        
+        Args:
+            None
+
+        Returns:
+            None
+        """
         super(BertFinetuneModel, self).__init__(**kwargs)
         self.bert_model = BertModel.from_pretrained("Rostlab/prot_bert")
         # freeze the embeddings
@@ -133,6 +204,16 @@ class BertFinetuneModel(BaseModule):
         )
 
     def _forward(self, input_ids, attention_mask):
+        """Helper function to perform the forward pass.
+
+        Args:
+            batch: torch_geometric.data.Data
+            input_ids: IDs of the embeddings to be used in the model.
+            attention_mask: Masking to use durinig BERT's self-attention.
+        
+        Returns:
+            logits
+        """
         x = self.bert_model(
             input_ids, attention_mask=attention_mask
         ).pooler_output
@@ -140,11 +221,28 @@ class BertFinetuneModel(BaseModule):
         return outputs
 
     def forward(self, batch):
+        """Performs the forward pass.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+        
+        Returns:
+            logits
+        """
         outputs = self._forward(batch["input_ids"], batch["attention_mask"])
         return outputs
 
     def _step(self, batch, batch_idx, prefix="train"):
-        """Used in train/validation loop, independent of `forward`"""
+        """Used in train/validation loop, independent of `forward`
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+
+        Returns:
+            Loss
+        """
         logits = self._forward(batch["input_ids"], batch["attention_mask"])
         loss = self._compute_loss(logits, batch["labels"])
         self.log("{}_loss".format(prefix), loss)
@@ -152,19 +250,8 @@ class BertFinetuneModel(BaseModule):
 
 
 class MQAModel(BaseModule):
-    """
-    GVP Model (structure-only) modified from `MQAModel`:
+    """GVP Model (structure-only) modified from `MQAModel`:
     https://github.com/drorlab/gvp-pytorch/blob/main/gvp/model.py
-    Args:
-        - node_in_dim: node dimensions (s, V) in input graph
-        - node_h_dim: node dimensions to use in GVP-GNN layers
-        - edge_in_dim: edge dimensions (s, V) in input graph
-        - edge_h_dim: edge dimensions to embed to before use in GVP-GNN
-            layers
-        - weights: a tensor of class weights
-        - num_layers: number of GVP-GNN layers
-        - drop_rate: rate to use in all dropout layers
-        - residual: whether to have residual connections among GNN layers
     """
 
     def __init__(
@@ -178,6 +265,21 @@ class MQAModel(BaseModule):
         residual=True,
         **kwargs,
     ):
+        """Initializes the module
+
+        Args:
+            node_in_dim: node dimensions (s, V) in input graph
+            node_h_dim: node dimensions to use in GVP-GNN layers
+            edge_in_dim: edge dimensions (s, V) in input graph
+            edge_h_dim: edge dimensions to embed to before use in GVP-GNN layers
+            weights: a tensor of class weights
+            num_layers: number of GVP-GNN layers
+            drop_rate: rate to use in all dropout layers
+            residual: whether to have residual connections among GNN layers
+        
+        Returns:
+            None
+        """
         super(MQAModel, self).__init__(**kwargs)
         self.save_hyperparameters(
             "node_in_dim",
@@ -227,12 +329,30 @@ class MQAModel(BaseModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        """Adds model specific args to the base/parent parser.
+
+        Args:
+            parent_parser: Base/parent parser
+
+        Returns:
+            parent parser with additional model-specific args
+
+        """
         parser = parent_parser.add_argument_group("GVPModel")
         parser.add_argument("--residual", type=bool, default=True)
         return parent_parser
 
     def _step(self, batch, batch_idx, prefix="train"):
-        """batch: tuple of (torch_geometric.data.Data, targets)"""
+        """Forward pass and computation of the loss.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+
+        Returns:
+            Loss
+        """
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
@@ -240,14 +360,26 @@ class MQAModel(BaseModule):
         return loss
 
     def forward(self, batch):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Perform the forward pass.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+        
+        Returns:
+            logits
+        """
         x, targets = batch
         logits = self._forward(x)
         return logits
 
     def _forward(self, batch):
-        """GVP network forward pass
-        batch: torch_geometric.data.Data
+        """Helper function to perform GVP network forward pass.
+
+        Args:
+            batch: torch_geometric.data.Data
+
+        Returns:
+            logits
         """
         h_V = (batch.node_s, batch.node_v)
         h_E = (batch.edge_s, batch.edge_v)
@@ -285,9 +417,6 @@ class MQAModel(BaseModule):
 
 class GATModel(BaseModule):
     """GAT structure-only model.
-    Args:
-        - n_hidden: number of hidden units in classification head
-        - drop_rate: rate to use in the dropout layer
     """
 
     def __init__(
@@ -296,6 +425,15 @@ class GATModel(BaseModule):
         drop_rate=0.2,
         **kwargs,
     ):
+        """Initializes the model
+
+        Args:
+            n_hidden: number of hidden units in classification head
+            drop_rate: rate to use in the dropout layer
+
+        Returns:
+            None
+        """
         super(GATModel, self).__init__(**kwargs)
         self.save_hyperparameters(
             "n_hidden",
@@ -319,7 +457,16 @@ class GATModel(BaseModule):
         )
 
     def _step(self, batch, batch_idx, prefix="train"):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Forward pass and computation of the loss.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+
+        Returns:
+            Loss
+        """
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
@@ -327,14 +474,26 @@ class GATModel(BaseModule):
         return loss
 
     def forward(self, batch):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Perform the forward pass.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+        
+        Returns:
+            logits
+        """
         x, targets = batch
         logits = self._forward(x)
         return logits
 
     def _forward(self, batch):
-        """
-        batch: torch_geometric.data.Data
+        """Helper function to perform the forward pass.
+
+        Args:
+            batch: torch_geometric.data.Data
+
+        Returns:
+            logits
         """
         edge_index = batch.edge_index
         seq = batch.seq
@@ -353,8 +512,7 @@ class GATModel(BaseModule):
 
 
 class BertMQAModel(BaseModule):
-    """
-    Bert + GVP-GNN head (LM-GVP).
+    """Bert + GVP-GNN head (LM-GVP).
 
     Takes in protein structure graphs of type `torch_geometric.data.Data`
     or `torch_geometric.data.Batch` and returns a scalar score for
@@ -362,19 +520,6 @@ class BertMQAModel(BaseModule):
 
     Should be used with `data.ProteinGraphDataset`, or with generators
     of `torch_geometric.data.Batch` objects with the same attributes.
-
-    Args:
-        - node_in_dim: node dimensions (s, V) in input graph
-        - node_h_dim: node dimensions to use in GVP-GNN layers
-        - edge_in_dim: edge dimensions (s, V) in input graph
-        - edge_h_dim: edge dimensions to embed to before use in GVP-GNN
-            layers
-        - weights: a tensor of class weights
-        - num_layers: number of GVP-GNN layers
-        - drop_rate: rate to use in all dropout layers
-        - residual: whether to have residual connections among GNN layers
-        - freeze_bert: wheter to freeze the entire bert model
-        - freeze_layer_count: number of bert.embedding layers to freeze.
     """
 
     def __init__(
@@ -390,6 +535,23 @@ class BertMQAModel(BaseModule):
         freeze_layer_count=-1,
         **kwargs,
     ):
+        """
+
+        Args:
+            node_in_dim: node dimensions (s, V) in input graph
+            node_h_dim: node dimensions to use in GVP-GNN layers
+            edge_in_dim: edge dimensions (s, V) in input graph
+            edge_h_dim: edge dimensions to embed to before use in GVP-GNN layers
+            weights: a tensor of class weights
+            num_layers: number of GVP-GNN layers
+            drop_rate: rate to use in all dropout layers
+            residual: whether to have residual connections among GNN layers
+            freeze_bert: wheter to freeze the entire bert model
+            freeze_layer_count: number of bert.embedding layers to freeze.
+            
+        Returns:
+            None
+        """
 
         super(BertMQAModel, self).__init__(**kwargs)
         self.save_hyperparameters(
@@ -449,6 +611,15 @@ class BertMQAModel(BaseModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        """Adds model specific args to the base/parent parser.
+
+        Args:
+            parent_parser: Base/parent parser
+
+        Returns:
+            parent parser with additional model-specific args
+
+        """
         parser = parent_parser.add_argument_group("BertGVPModel")
         parser.add_argument("--freeze_bert", type=bool, default=False)
         parser.add_argument(
@@ -461,7 +632,15 @@ class BertMQAModel(BaseModule):
         return parent_parser
 
     def _step(self, batch, batch_idx, prefix="train"):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Forward pass and computation of the loss.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+        Returns:
+            Loss
+        """
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
@@ -469,14 +648,28 @@ class BertMQAModel(BaseModule):
         return loss
 
     def forward(self, batch, input_ids=None):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Perform the forward pass.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            input_ids: IDs of the embeddings to be used in the model.
+        
+        Returns:
+            logits
+        """
         x, targets = batch
         logits = self._forward(x, input_ids=input_ids)
         return logits
 
     def _forward(self, batch, input_ids=None):
         """
-        batch: torch_geometric.data.Data
+        Helper function to perform the forward pass.
+
+        Args:
+            batch: torch_geometric.data.Data
+            input_ids: IDs of the embeddings to be used in the model.
+        Returns:
+            logits
         """
         h_V = (batch.node_s, batch.node_v)
         h_E = (batch.edge_s, batch.edge_v)
@@ -520,9 +713,6 @@ class BertMQAModel(BaseModule):
 
 class BertGATModel(BaseModule):
     """Bert + GAT head.
-    Args:
-        - n_hidden: number of hidden units in classification head
-        - drop_rate: rate to use in the dropout layer
     """
 
     def __init__(
@@ -533,6 +723,17 @@ class BertGATModel(BaseModule):
         freeze_layer_count=-1,
         **kwargs,
     ):
+        """Initializes the module
+
+        Args:
+            n_hidden: number of hidden units in classification head.
+            drop_rate: rate to use in the dropout layer.
+            freeze_bert: Whether or not to freeze bert layers for training.
+            freeze_layer_count: If freeze_bert is true, up to what layer to freeze. -1 freeze all of them.
+
+        Returns:
+            None
+        """
 
         super(BertGATModel, self).__init__(**kwargs)
         self.save_hyperparameters(
@@ -565,6 +766,15 @@ class BertGATModel(BaseModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        """Adds model specific args to the base/parent parser.
+
+        Args:
+            parent_parser: Base/parent parser
+
+        Returns:
+            parent parser with additional model-specific args
+
+        """
         parser = parent_parser.add_argument_group("BertGATModel")
         parser.add_argument("--freeze_bert", type=bool, default=False)
         parser.add_argument(
@@ -577,7 +787,16 @@ class BertGATModel(BaseModule):
         return parent_parser
 
     def _step(self, batch, batch_idx, prefix="train"):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Forward pass and computation of the loss.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: #NOTE: Not used!
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+        
+        Returns:
+            Loss
+        """
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
@@ -585,14 +804,27 @@ class BertGATModel(BaseModule):
         return loss
 
     def forward(self, batch):
-        """batch: (torch_geometric.data.Data, targets)"""
+        """Does the forward pass through the model for batch[0]
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+        
+        Returns:
+            Inferenced logits
+        """
         x, targets = batch
         logits = self._forward(x)
         return logits
 
     def _forward(self, batch):
-        """
-        batch: torch_geometric.data.Data
+        """Does the forward pass through the model for batch
+
+        Args:
+            batch: torch_geometric.data.Data
+            
+        Returns:
+            Inferenced logits
+        
         """
         edge_index = batch.edge_index
         batch_size = batch.num_graphs

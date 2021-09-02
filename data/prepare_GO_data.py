@@ -31,7 +31,15 @@ OUTPUT_DIR = "/home/ec2-user/SageMaker/efs/gvp-datasets/DeepFRI_GO"
 
 def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
     """Extract the coordinates of the target_atoms from an AA residue.
-    Handles exception where residue doesn't contain certain atoms
+    Handles exception where residue doesn't contain certain atoms 
+    by setting coordinates to np.nan
+
+    Args:
+        residue: #TODO [object type]. 
+        target_atoms: Target atoms which residues will be resturned.
+
+    Returns:
+        np arrays with target atoms 3D coordinates in the order of target atoms.
     """
     atom_coords = []
     for atom in target_atoms:
@@ -45,7 +53,16 @@ def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
 
 def chain_to_coords(chain, target_atoms=["N", "CA", "C", "O"], name=""):
     """Convert a PDB chain in to coordinates of target atoms from all
-    AAs"""
+    AAs
+    
+    Args:
+        chain: #TODO
+        target_atoms: Target atoms which residues will be resturned.
+        name: #TODO
+    Returns:
+        Dictonary containing protein sequence `seq`, 3D coordinates `coord` and name `name`.
+        
+    """
     output = {}
     # get AA sequence in the pdb structure
     pdb_seq = "".join(
@@ -76,7 +93,18 @@ def parse_structure_file_to_json_record(
     pdb_parser, cif_parser, sequence, pdb_file_path, name=""
 ):
     """Parse a protein structure file (.pdb or .cif) to extract all the chains
-    to json records for LM-GVP model."""
+    to json records for LM-GVP model.
+    
+    Args:
+        pdb_parser: #TODO [object type] to parse the PDB files.
+        cif_parser: #TODO [object type] to parse the CIF files.
+        sequence: #TODO [object type] representing the protein sequence
+        pdb_file_path: String. Path to the PDB file.
+        name: # TODO
+    
+    Returns:
+        List of [#TODO] records
+    """
 
     try:
         struct = parse_structure(
@@ -99,68 +127,71 @@ def parse_structure_file_to_json_record(
         return records
 
 
-# 0. Prepare structure parser
-# PDB parser
-pdb_parser = PDBParser(
-    QUIET=True,
-    PERMISSIVE=True,
-    structure_builder=xpdb.SloppyStructureBuilder(),
-)
 
-# CIF parser
-cif_parser = MMCIFParser(
-    QUIET=True,
-    structure_builder=xpdb.SloppyStructureBuilder(),
-)
+if __name__=='__main__':
 
-# 1. Load metadata
-df = []
-for split in ["train", "valid", "test"]:
-    split_df = pd.read_csv(
-        os.path.join(DATA_DIR, "data", f"nrPDB-GO_2019.06.18_{split}.txt"),
-        sep="\t",
-        header=None,
+    # 0. Prepare structure parser
+    # PDB parser
+    pdb_parser = PDBParser(
+        QUIET=True,
+        PERMISSIVE=True,
+        structure_builder=xpdb.SloppyStructureBuilder(),
     )
-    split_df["split"] = split
-    print(split, split_df.shape)
-    df.append(split_df)
 
-df = pd.concat(df)
-df = df.set_index(df.columns[0], verify_integrity=True)
-print(df.shape)
-
-# 2. Parse the structure files and save to json files
-for split in ["train", "valid", "test"]:
-    structure_file_dir = os.path.join(
-        DATA_DIR, f"cif-nrPDB-GO_2019.06.18_{split}"
+    # CIF parser
+    cif_parser = MMCIFParser(
+        QUIET=True,
+        structure_builder=xpdb.SloppyStructureBuilder(),
     )
-    files = os.listdir(structure_file_dir)
 
-    records = Parallel(n_jobs=-1)(
-        delayed(parse_structure_file_to_json_record)(
-            pdb_parser,
-            cif_parser,
-            files[i].split(".")[0],
-            os.path.join(structure_file_dir, files[i]),
-            files[i].split(".")[0],
+    # 1. Load metadata
+    df = []
+    for split in ["train", "valid", "test"]:
+        split_df = pd.read_csv(
+            os.path.join(DATA_DIR, "data", f"nrPDB-GO_2019.06.18_{split}.txt"),
+            sep="\t",
+            header=None,
         )
-        for i in tqdm(range(len(files)))
-    )
+        split_df["split"] = split
+        print(split, split_df.shape)
+        df.append(split_df)
 
-    # concat inner lists
-    records = reduce(lambda x, y: x + y, records)
-    print(split, len(records))
+    df = pd.concat(df)
+    df = df.set_index(df.columns[0], verify_integrity=True)
+    print(df.shape)
 
-    # keep chains in df only
-    chains_for_split = set(df.loc[df["split"] == split].index)
-    records = [rec for rec in records if rec["name"] in chains_for_split]
+    # 2. Parse the structure files and save to json files
+    for split in ["train", "valid", "test"]:
+        structure_file_dir = os.path.join(
+            DATA_DIR, f"cif-nrPDB-GO_2019.06.18_{split}"
+        )
+        files = os.listdir(structure_file_dir)
 
-    # check if there is any chains missing
-    missed_chains = chains_for_split - set([rec["name"] for rec in records])
-    if len(missed_chains) > 0:
-        print("Missing chains:", len(missed_chains))
+        records = Parallel(n_jobs=-1)(
+            delayed(parse_structure_file_to_json_record)(
+                pdb_parser,
+                cif_parser,
+                files[i].split(".")[0],
+                os.path.join(structure_file_dir, files[i]),
+                files[i].split(".")[0],
+            )
+            for i in tqdm(range(len(files)))
+        )
 
-    # write to json file
-    json.dump(
-        records, open(os.path.join(OUTPUT_DIR, f"proteins_{split}.json"), "w")
-    )
+        # concat inner lists
+        records = reduce(lambda x, y: x + y, records)
+        print(split, len(records))
+
+        # keep chains in df only
+        chains_for_split = set(df.loc[df["split"] == split].index)
+        records = [rec for rec in records if rec["name"] in chains_for_split]
+
+        # check if there is any chains missing
+        missed_chains = chains_for_split - set([rec["name"] for rec in records])
+        if len(missed_chains) > 0:
+            print("Missing chains:", len(missed_chains))
+
+        # write to json file
+        json.dump(
+            records, open(os.path.join(OUTPUT_DIR, f"proteins_{split}.json"), "w")
+        )

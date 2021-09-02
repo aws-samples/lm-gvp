@@ -14,6 +14,7 @@ from Bio.PDB.Residue import Residue
 
 class SloppyStructureBuilder(Bio.PDB.StructureBuilder.StructureBuilder):
     """Cope with resSeq < 10,000 limitation by just incrementing internally.
+    # TODO -- resolve
 
     # Q: What's wrong here??
     #   Some atoms or residues will be missing in the data structure.
@@ -23,6 +24,7 @@ class SloppyStructureBuilder(Bio.PDB.StructureBuilder.StructureBuilder):
     #
     # A: resSeq only goes to 9999 --> goes back to 0 (PDB format is not really
     #    good here)
+
     """
 
     # NOTE/TODO:
@@ -38,12 +40,13 @@ class SloppyStructureBuilder(Bio.PDB.StructureBuilder.StructureBuilder):
         """Initiate a new Residue object.
 
         Arguments:
-        o resname - string, e.g. "ASN"
-        o field - hetero flag, "W" for waters, "H" for
-            hetero residues, otherwise blanc.
-        o resseq - int, sequence identifier
-        o icode - string, insertion code
+            resname: string, e.g. "ASN"
+            field: hetero flag, "W" for waters, "H" for hetero residues, otherwise blanc.
+            resseq: int, sequence identifier
+            icode: string, insertion code
 
+        Return:
+            None
         """
         if field != " ":
             if field == "H":
@@ -81,6 +84,7 @@ class SloppyStructureBuilder(Bio.PDB.StructureBuilder.StructureBuilder):
         residue = Residue(res_id, resname, self.segid)
         self.chain.add(residue)
         self.residue = residue
+        return None
 
 
 class SloppyPDBIO(Bio.PDB.PDBIO):
@@ -118,6 +122,20 @@ class SloppyPDBIO(Bio.PDB.PDBIO):
         - Atom number (atom_number) is wrapped (modulo 100,000) to fit into
           %5i (5I) format
 
+        Args: #TODO
+            atom:
+            hetfield:
+            segid:
+            atom_number:
+            resname:
+            resseq:
+            icode:
+            chain_id:
+            element:
+            charge:
+
+        Returns:
+            #TODO
         """
         if hetfield != " ":
             record_type = "HETATM"

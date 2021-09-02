@@ -18,6 +18,14 @@ import torch_cluster
 def _normalize(tensor, dim=-1):
     """
     Normalizes a `torch.Tensor` along dimension `dim` without `nan`s.
+
+    Args:
+        tensor: Torch tensor to be normalized.
+        dim: Integer. Dimension to normalize across.
+    
+    Returns:
+        Normalized tensor with zeros instead of nan's or infinity values.
+
     """
     return torch.nan_to_num(
         torch.div(tensor, torch.norm(tensor, dim=dim, keepdim=True))
@@ -31,6 +39,17 @@ def _rbf(D, D_min=0.0, D_max=20.0, D_count=16, device="cpu"):
     Returns an RBF embedding of `torch.Tensor` `D` along a new axis=-1.
     That is, if `D` has shape [...dims], then the returned tensor will have
     shape [...dims, D_count].
+
+
+    Args:
+        D: generic torch tensor
+        D_min: Float. Minimum of the sequence of numbers created. 
+        D_max: Float. Max of the sequence of numbers created.
+        D_count: Positive integer. Count of the numbers in the sequence. It is also lenght of the new dimension (-1) created in D. 
+        device: Device where D is stored. 
+
+    Return:
+        Input `D` matrix with an RBF embedding along axis -1.
     """
     D_mu = torch.linspace(D_min, D_max, D_count, device=device)
     D_mu = D_mu.view([1, -1])
@@ -42,6 +61,10 @@ def _rbf(D, D_min=0.0, D_max=20.0, D_count=16, device="cpu"):
 
 
 class BaseProteinGraphDataset(data.Dataset):
+    """Dataset for the Base Protein Graph.
+    """
+
+
     def __init__(
         self,
         data_list,
@@ -51,6 +74,20 @@ class BaseProteinGraphDataset(data.Dataset):
         device="cpu",
         preprocess=True,
     ):
+        """
+        Initializes the dataset
+
+        Args:
+            data_list: List containint the initial dataset
+            num_positional_embeddings: Integer specifying the number of positional embeddings.
+            top_k: #TODO
+            num_rbf: #TODO
+            device: Device to allocate the tensors.
+            preprocess: Whether to preprocess the data_list.
+
+        Returns:
+            None
+        """
 
         super(BaseProteinGraphDataset, self).__init__()
 
@@ -64,6 +101,7 @@ class BaseProteinGraphDataset(data.Dataset):
             self._preprocess()
 
     def _preprocess(self):
+
         """Preprocess all the records in `data_list` with
         `_featurize_as_graph`"""
         for i in tqdm.tqdm(range(len(self.data_list))):
@@ -79,10 +117,26 @@ class BaseProteinGraphDataset(data.Dataset):
         return len(self.data_list)
 
     def _featurize_as_graph(self, protein):
-        # to be implemented by child classes
+        """Placeholder for the _featurize_as_graph method implemented in child classes.
+        
+        Args:
+            protein: #TODO
+
+        Returns:
+            None
+        """
         raise NotImplementedError
 
     def _dihedrals(self, X, eps=1e-7):
+        """#TODO
+        
+        Args:
+            X: #TODO
+            eps: Float defining the epsilo using to clamp the angle between normals: min= -1*eps, max=1-eps
+
+        Returns:
+            #TODO
+        """
         # From https://github.com/jingraham/neurips19-graph-protein-design
 
         X = torch.reshape(X[:, :3], [3 * X.shape[0], 3])
@@ -111,6 +165,16 @@ class BaseProteinGraphDataset(data.Dataset):
     def _positional_embeddings(
         self, edge_index, num_embeddings=None, period_range=[2, 1000]
     ):
+        """ Creates and returns the positional embeddings.
+        
+        Args:
+            edge_index: #TODO
+            num_embeddings: Integer representing the number of embeddings.
+            period_range: #NOTE: Not used, please correct. 
+
+        Returns:
+            Positional embeddings as a torch tensor
+        """
         # From https://github.com/jingraham/neurips19-graph-protein-design
         num_embeddings = num_embeddings or self.num_positional_embeddings
         d = edge_index[0] - edge_index[1]
@@ -126,6 +190,14 @@ class BaseProteinGraphDataset(data.Dataset):
         return E
 
     def _orientations(self, X):
+        """ #TODO
+        
+        Args:
+            X: #TODO
+
+        Returns:
+            Torch tensor representing #TODO
+        """
         forward = _normalize(X[1:] - X[:-1])
         backward = _normalize(X[:-1] - X[1:])
         forward = F.pad(forward, [0, 0, 0, 1])
@@ -133,6 +205,14 @@ class BaseProteinGraphDataset(data.Dataset):
         return torch.cat([forward.unsqueeze(-2), backward.unsqueeze(-2)], -2)
 
     def _sidechains(self, X):
+        """ #TODO
+        
+        Args:
+            X: #TODO
+
+        Returns:
+            Torch tensor representing #TODO
+        """
         n, origin, c = X[:, 0], X[:, 1], X[:, 2]
         c, n = _normalize(c - origin), _normalize(n - origin)
         bisector = _normalize(c + n)
@@ -148,6 +228,15 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
     """
 
     def __init__(self, data_list, **kwargs):
+        """
+        Initializes the dataset
+
+        Args:
+            data_list: List containint the initial data
+
+        Returns:
+            None
+        """
         self.letter_to_num = {
             "C": 4,
             "D": 3,
@@ -175,6 +264,14 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
         super(StandardProteinGraphDataset, self).__init__(data_list, **kwargs)
 
     def _featurize_as_graph(self, protein):
+        """Featurizes the protein information as a graph for the GNN
+        
+        Args:
+            protein: Dictionary with the protein seq, coord and name.
+
+        Returns:
+            Torch geometric data instance representing with the protein information
+        """
         name = protein["name"]
         with torch.no_grad():
             coords = torch.as_tensor(
@@ -252,10 +349,26 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
     """
 
     def __init__(self, data_list, **kwargs):
+        """
+        Initializes the dataset
 
+        Args:
+            data_list: List containint the initial data
+
+        Returns:
+            None
+        """
         super(ProteinGraphDataset, self).__init__(data_list, **kwargs)
 
     def _featurize_as_graph(self, protein):
+        """Featurizes the protein information as a graph for the GNN
+        
+        Args:
+            protein: Dictionary with the protein seq, coord and name.
+
+        Returns:
+            Torch geometric data instance representing with the protein information
+        """
         name = protein["name"]
         input_ids = protein["input_ids"]
         attention_mask = protein["attention_mask"]

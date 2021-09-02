@@ -4,6 +4,7 @@
 """
 Utils for preparing self-attention maps and contact maps.
 """
+
 import numpy as np
 import torch
 from transformers import BertModel
@@ -11,12 +12,15 @@ from sklearn.metrics import pairwise_distances
 
 
 def calc_contact_map(protein: dict, dist_thres=10, k=6):
-    """
-    Calculate a protein's contact map
+    """Calculate a protein's contact map. Directly modifying the protein object.
+    
     Args:
-        - protein: a dict object from LM-GVP formatted data (json record).
-        - dist_thres: threshold for C-alpha distance to create an edge
-        - k: number of amino acids away to filter out local contacts
+        protein: a dict object from LM-GVP formatted data (json record).
+        dist_thres: threshold for C-alpha distance to create an edge
+        k: number of amino acids away to filter out local contacts
+
+    Return:
+        None
     """
     coords = np.asarray(protein["coords"])
     # coordinates of C-alpha atoms
@@ -34,19 +38,20 @@ def calc_contact_map(protein: dict, dist_thres=10, k=6):
 
     protein["contact_map"] = contact_map
     protein["idx"] = idx
-    return
+    return None
 
 
 def calc_self_attn(
     bert_model: BertModel, protein: dict, device="cuda:0", **kwargs
 ):
     """Calculate self-attention matrices given Bert model for one protein.
+    
     Args:
-        - bert_model: a BertModel instance
-        - protein: a dict object from LM-GVP formatted data (json record).
-        - device: device to do the computation
+        bert_model: a BertModel instance
+        protein: a dict object from LM-GVP formatted data (json record).
+        device: device to do the computation
     Returns:
-        - a torch.tensor of shape: [n_maps, seqlen, seqlen]
+        torch.tensor of shape: [n_maps, seqlen, seqlen]
     """
     bert_model = bert_model.to(device)
     bert_model.eval()
@@ -76,12 +81,25 @@ def calc_self_attn(
 
 def symmetrize(x):
     """Make layer symmetric in the final two
-    dimensions, used for contact prediction."""
+    dimensions, used for contact prediction.
+    
+    Args:
+        x: numpy array.
+    Returns:
+        sum-symmetrized array (in the last 2 dimensions)
+    """
     return x + x.transpose(-1, -2)
 
 
 def apc(x):
-    """Perform average product correct, used for contact prediction."""
+    """Perform average product correct, used for contact prediction.
+    
+    Args:
+        x: np array.
+    Returns:
+        apc np array
+
+"""
     a1 = x.sum(-1, keepdims=True)
     a2 = x.sum(-2, keepdims=True)
     a12 = x.sum((-1, -2), keepdims=True)
@@ -95,9 +113,13 @@ def apc(x):
 def extract_process_attns(bert_model: BertModel, protein: dict, **kwargs):
     """Calculate self-attention matrix, process with apc, then take the upper
     triangle.
+    
     Args:
-        - bert_model: a BertModel instance
-        - protein: a dict object from LM-GVP formatted data (json record).
+        bert_model: a BertModel instance
+        protein: a dict object from LM-GVP formatted data (json record).
+    
+    Returns:
+        Processed attentions as numpy array. 
     """
     attns = calc_self_attn(bert_model, protein, **kwargs)
     attns = apc(symmetrize(attns)).numpy()
@@ -112,9 +134,13 @@ def calc_dataset_attn_and_contact(
 ):
     """Calculate attention matrices and contacts for a list of protein
     records.
+
     Args:
-        - dataset: a list of protein records
-        - bert_model: a BertModel instance
+        dataset: a list of protein records
+        bert_model: a BertModel instance
+
+    Returns:
+        tuple where the first element is the processed self attention matrices and the contact map for each protein. First dimension are proteins and match between both objects. 
     """
     self_attn_mats = []  # collect tensors of processed attn maps
     contact_maps = []  # collect tensors of contact map

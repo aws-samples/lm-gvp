@@ -7,6 +7,7 @@ generate json records compatible to the LM-GVP model.
 
 This script is intended for Fluorescence and Protease datasets from TAPE.
 """
+
 import json
 import os
 import argparse
@@ -24,6 +25,13 @@ from contact_map_utils import parse_pdb_structure
 
 
 def parse_args():
+    """Prepare argument parser.
+
+    Args:
+
+    Return:
+
+    """
     parser = argparse.ArgumentParser(
         description="Generate GVP ProteinGraph datasets representing protein"
         + "structures."
@@ -47,13 +55,29 @@ def parse_args():
 
 
 def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
-    """Extract the coordinates of the target_atoms from an AA residue."""
+    """Extract the coordinates of the target_atoms from an AA residue.
+    
+    Args:
+        residue: # TODO [kind of object] representing the residue.
+        target_atoms: Target atoms which residues will be returned.
+
+    Retruns:
+        Array of residue's target atoms (in the same order as target atoms).
+    """
     return np.asarray([residue[atom].coord for atom in target_atoms])
 
 
 def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
-    """Convert a PDB structure in to coordinates of target atoms from all
-    AAs"""
+    """Convert a PDB structure in to coordinates of target atoms from all AAs
+    
+    Args:
+        struct: #TODO [structure object] representing the protein structure
+        target_atoms: Target atoms which residues will be returned.
+        name: String. #TODO
+
+    Return:
+        Dictionary with the pdb sequence, atom 3D coordinates and name.
+    """
     output = {}
     # get AA sequence in the pdb structure
     pdb_seq = "".join(
@@ -73,12 +97,32 @@ def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
 
 
 def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
+    """
+    Reads and reformats a pdb strcuture into a dictionary.
+
+    Args:
+        parser: #TODO
+        sequence: #TODO
+        pdb_file_path: String. Path to the pdb file.
+        name: #TODO
+
+    Return:
+
+    """
     struct = parse_pdb_structure(parser, sequence, pdb_file_path)
     record = structure_to_coords(struct, name=name)
     return record
 
 
 def main():
+    """
+    Data preparation main script: Load data, parses PDB, processes structures, seggregate records and write to disk. Configuration via commandline arguments.
+
+    Args:
+
+    Return:
+
+    """
     args = parse_args()
     # 1. Load data
     df = pd.read_csv(args.data_file)
@@ -115,7 +159,8 @@ def main():
         print(split, "number of proteins:", len(records))
         outfile = os.path.join(args.output, f"proteins_{split}.json")
         json.dump(records, open(outfile, "w"))
-    return
+    
+    return None
 
 
 if __name__ == "__main__":
