@@ -1,6 +1,6 @@
 # LM-GVP: 
 
-Source code for "LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure"
+Source code for "[LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure](https://www.biorxiv.org/content/10.1101/2021.09.21.460852v1)" 
 <img src="figs/lmgvp.png">
 
 ## Dependencies
@@ -82,7 +82,23 @@ Codes and notebooks used for model analyses are available in the following direc
 
 ## Citation
 
-Coming soon...
+Please cite the following preprint:
+
+```
+@article {LMGVP21,
+	author = {Wang, Zichen and Combs, Steven A. and Brand, Ryan and Calvo, Miguel Romero and Xu, Panpan and Price, George and Golovach, Nataliya and Salawu, Emannuel O. and Wise, Colby J. and Ponnapalli, Sri Priya and Clark, Peter M.},
+	title = {LM-GVP: A Generalizable Deep Learning Framework for Protein Property Prediction from Sequence and Structure},
+	elocation-id = {2021.09.21.460852},
+	year = {2021},
+	doi = {10.1101/2021.09.21.460852},
+	publisher = {Cold Spring Harbor Laboratory},
+	abstract = {Proteins perform many essential functions in biological systems and can be successfully developed as bio-therapeutics. It is invaluable to be able to predict their properties based on a proposed sequence and structure. In this study, we developed a novel generalizable deep learning framework, LM-GVP, composed of a protein Language Model (LM) and Graph Neural Network (GNN) to leverage information from both 1D amino acid sequences and 3D structures of proteins. Our approach outperformed the state-of-the-art protein LMs on a variety of property prediction tasks including fluorescence, protease stability, and protein functions from Gene Ontology (GO). We also illustrated insights into how a GNN prediction head can guide the protein LM to better leverage structural information. We envision that our deep learning framework will be generalizable to many protein property prediction problems to greatly accelerate protein engineering and drug development.Competing Interest StatementThe authors have declared no competing interest.},
+	URL = {https://www.biorxiv.org/content/early/2021/09/21/2021.09.21.460852},
+	eprint = {https://www.biorxiv.org/content/early/2021/09/21/2021.09.21.460852.full.pdf},
+	journal = {bioRxiv}
+}
+
+```
 
 ## Security
 
