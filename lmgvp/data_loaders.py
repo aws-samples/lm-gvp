@@ -18,11 +18,9 @@ from lmgvp.datasets import (
 )
 from lmgvp.deepfrier_utils import load_GO_annot
 
-DATA_ROOT_DIR = "/home/ec2-user/SageMaker/efs"
-
 
 def load_gvp_data(
-    gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR),
+    dataset_dir="",
     task="protease/with_tags",
     split="train",
     seq_only=False,
@@ -39,7 +37,7 @@ def load_gvp_data(
     Retrun:
         Dictionary containing the GVP dataset of proteins.
     """
-    filename = os.path.join(gvp_data_dir, task, f"proteins_{split}.json")
+    filename = os.path.join(dataset_dir, task, f"proteins_{split}.json")
     dataset = json.load(open(filename, "rb"))
     if seq_only:
         # delete the "coords" in data objects
@@ -67,7 +65,7 @@ def preprocess_seqs(tokenizer, dataset):
     return dataset
 
 
-def load_GO_labels(task="cc"):
+def load_GO_labels(task="cc", dataset_dir=""):
     """Load the labels in the GO dataset
 
     Args:
@@ -78,8 +76,8 @@ def load_GO_labels(task="cc"):
     """
     prot2annot, goterms, gonames, counts = load_GO_annot(
         os.path.join(
-            DATA_ROOT_DIR,
-            "DeepFRI_GO_PDB/data/nrPDB-GO_2019.06.18_annot.tsv",
+            dataset_dir,
+            "DeepFRI_GO/nrPDB-GO_2019.06.18_annot.tsv",
         )
     )
     goterms = goterms[task]
@@ -116,13 +114,14 @@ def add_GO_labels(dataset, prot2annot, go_ont="cc"):
     return dataset
 
 
-def get_dataset(task="", model_type="", split="train"):
+def get_dataset(task="", model_type="", split="train", dataset_dir=""):
     """Load data from files, then transform into appropriate
     Dataset objects.
     Args:
         task: one of ['cc', 'bp', 'mf', 'protease', 'flu']
         model_type: one of ['seq', 'struct', 'seq_struct']
         split: one of ['train', 'valid', 'test']
+        dataset_dir: path to datasets
 
     Return:
         Torch dataset.
@@ -140,16 +139,24 @@ def get_dataset(task="", model_type="", split="train"):
     # Load data from files
     if task in ("cc", "bp", "mf"):  # GO dataset
         # load labels
-        prot2annot, num_outputs, pos_weights = load_GO_labels(task)
+        prot2annot, num_outputs, pos_weights = load_GO_labels(
+            task, dataset_dir
+        )
         # load features
         dataset = load_gvp_data(
-            task="DeepFRI_GO", split=split, seq_only=seq_only
+            task="DeepFRI_GO",
+            split=split,
+            seq_only=seq_only,
+            dataset_dir=dataset_dir,
         )
         add_GO_labels(dataset, prot2annot, go_ont=task)
     else:
         data_dir = {"protease": "protease/with_tags", "flu": "Fluorescence"}
         dataset = load_gvp_data(
-            task=data_dir[task], split=split, seq_only=seq_only
+            task=data_dir[task],
+            split=split,
+            seq_only=seq_only,
+            dataset_dir=dataset_dir,
         )
         num_outputs = 1
         pos_weights = None

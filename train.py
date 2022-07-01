@@ -183,10 +183,16 @@ def main(args):
     pl.seed_everything(42, workers=True)
     # 1. Load data
     train_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="train"
+        task=args.task,
+        model_type=MODEL_TYPES[args.model_name],
+        split="train",
+        dataset_dir=args.dataset_dir,
     )
     valid_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="valid"
+        task=args.task,
+        model_type=MODEL_TYPES[args.model_name],
+        split="valid",
+        dataset_dir=args.dataset_dir,
     )
     print("Data loaded:", len(train_dataset), len(valid_dataset))
     # 2. Prepare data loaders
@@ -254,7 +260,10 @@ def main(args):
     print("Testing performance on test set")
     # load test data
     test_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="test"
+        task=args.task,
+        model_type=MODEL_TYPES[args.model_name],
+        split="test",
+        dataset_dir=args.dataset_dir,
     )
     test_loader = DataLoader(
         test_dataset,
@@ -295,6 +304,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task",
         help="Task to perform: ['flu', 'protease', 'cc', 'bp', 'mf']",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--dataset_dir",
+        help="Directory of dataset files",
         type=str,
         required=True,
     )
