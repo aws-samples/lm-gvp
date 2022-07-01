@@ -11,8 +11,7 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import torch.nn.functional as F
-import torch_geometric
-import torch_cluster
+import dgl
 from lmgvp.utils import prep_seq
 
 
@@ -266,7 +265,7 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
             protein: Dictionary with the protein seq, coord and name.
 
         Returns:
-            Torch geometric data instance representing with the protein information
+            dgl.graph instance representing with the protein information
         """
         name = protein["name"]
         with torch.no_grad():
@@ -283,7 +282,9 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
             coords[~mask] = np.inf
 
             X_ca = coords[:, 1]
-            edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
+            # construct knn graph from C-alpha coordinates
+            g = dgl.knn_graph(X_ca, k=min(self.top_k, X_ca.shape[0]))
+            edge_index = g.edges()
 
             pos_embeddings = self._positional_embeddings(edge_index)
             E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
@@ -308,17 +309,17 @@ class StandardProteinGraphDataset(BaseProteinGraphDataset):
                 torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
             )
 
-        return torch_geometric.data.Data(
-            x=X_ca,
-            seq=seq,
-            name=name,
-            node_s=node_s,
-            node_v=node_v,
-            edge_s=edge_s,
-            edge_v=edge_v,
-            edge_index=edge_index,
-            mask=mask,
-        )
+        # node features
+        g.ndata["node_s"] = node_s
+        g.ndata["node_v"] = node_v
+        g.ndata["mask"] = mask
+        g.ndata["seq"] = seq
+        # edge features
+        g.edata["edge_s"] = edge_s
+        g.edata["edge_v"] = edge_v
+        # graph attrs
+        setattr(g, "name", name)
+        return g
 
 
 class ProteinGraphDataset(BaseProteinGraphDataset):
@@ -363,7 +364,7 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             protein: Dictionary with the protein seq, coord and name.
 
         Returns:
-            Torch geometric data instance representing with the protein information
+            dgl.graph instance representing with the protein information
         """
         name = protein["name"]
         input_ids = protein["input_ids"]
@@ -378,7 +379,8 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             coords[~mask] = np.inf
 
             X_ca = coords[:, 1]
-            edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
+            g = dgl.knn_graph(X_ca, k=min(self.top_k, X_ca.shape[0]))
+            edge_index = g.edges()
 
             pos_embeddings = self._positional_embeddings(edge_index)
             E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
@@ -403,19 +405,18 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
                 torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
             )
 
-        data = torch_geometric.data.Data(
-            x=X_ca,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            name=name,
-            node_s=node_s,
-            node_v=node_v,
-            edge_s=edge_s,
-            edge_v=edge_v,
-            edge_index=edge_index,
-            mask=mask,
-        )
-        return data
+        # node features
+        g.ndata["node_s"] = node_s
+        g.ndata["node_v"] = node_v
+        g.ndata["mask"] = mask
+        # edge features
+        g.edata["edge_s"] = edge_s
+        g.edata["edge_v"] = edge_v
+        # graph attrs
+        setattr(g, "name", name)
+        setattr(g, "input_ids", input_ids)
+        setattr(g, "attention_mask", attention_mask)
+        return g
 
 
 # dataset classes with targets:
@@ -483,6 +484,9 @@ class SequenceDatasetWithTarget(data.Dataset):
         """
         return len(self.sequences)
 
+    def collate_fn(self):
+        return None
+
 
 class ProteinGraphDatasetWithTarget(StandardProteinGraphDataset):
     """Thin wrapper for ProteinGraphDataset to include targets.
@@ -509,6 +513,12 @@ class ProteinGraphDatasetWithTarget(StandardProteinGraphDataset):
                 self._featurize_as_graph(self.data_list[i]),
                 self.data_list[i]["target"],
             )
+
+    def collate_fn(self, samples):
+        graphs, targets = map(list, zip(*samples))
+        bg = dgl.batch(graphs)
+        bg.g_list = graphs  # to retrieve graph attrs in batched graphs
+        return bg, torch.stack(targets)
 
 
 class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
@@ -558,3 +568,9 @@ class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
                 self._featurize_as_graph(self.data_list[i]),
                 self.data_list[i]["target"],
             )
+
+    def collate_fn(self, samples):
+        graphs, targets = map(list, zip(*samples))
+        bg = dgl.batch(graphs)
+        bg.g_list = graphs
+        return bg, torch.stack(targets)

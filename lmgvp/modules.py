@@ -8,10 +8,14 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gvp.models import GVP, GVPConvLayer, LayerNorm
-from torch_scatter import scatter_mean
+
+from .gvp import GVP, GVPConvLayer, LayerNorm
+
+import dgl
+
 from transformers import BertModel
-from torch_geometric.nn import GATConv
+
+from dgl.nn import GATConv
 import pytorch_lightning as pl
 
 
@@ -164,7 +168,7 @@ class BaseModule(pl.LightningModule):
         To be implemented by child classes
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
             batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
 
@@ -371,19 +375,18 @@ class MQAModel(BaseModule):
         logits = self._forward(x)
         return logits
 
-    def _forward(self, batch):
+    def _forward(self, g):
         """Helper function to perform GVP network forward pass.
 
         Args:
-            batch: torch_geometric.data.Data
+            g: dgl.graph
 
         Returns:
             logits
         """
-        h_V = (batch.node_s, batch.node_v)
-        h_E = (batch.edge_s, batch.edge_v)
-        edge_index = batch.edge_index
-        seq = batch.seq
+        h_V = (g.ndata["node_s"], g.ndata["node_v"])
+        h_E = (g.edata["edge_s"], g.edata["edge_v"])
+        seq = g.ndata["seq"]
 
         if seq is not None:
             # one-hot encodings
@@ -391,17 +394,19 @@ class MQAModel(BaseModule):
             h_V = (torch.cat([h_V[0], seq], dim=-1), h_V[1])
         h_V = self.W_v(h_V)
         h_E = self.W_e(h_E)
+        g.ndata["node_s"], g.ndata["node_v"] = h_V[0], h_V[1]
+        g.edata["edge_s"], g.edata["edge_v"] = h_E[0], h_E[1]
         # GVP Conv layers
         if not self.residual:
             for layer in self.layers:
-                h_V = layer(h_V, edge_index, h_E)
+                h_V = layer(g)
             out = self.W_out(h_V)
         else:
             h_V_out = []  # collect outputs from all GVP Conv layers
-            h_V_in = h_V
             for layer in self.layers:
-                h_V_out.append(layer(h_V_in, edge_index, h_E))
-                h_V_in = h_V_out[-1]
+                h_V = layer(g)
+                h_V_out.append(h_V)
+                g.ndata["node_s"], g.ndata["node_v"] = h_V[0], h_V[1]
             # concat outputs from GVPConvLayers (separatedly for s and V)
             h_V_out = (
                 torch.cat([h_V[0] for h_V in h_V_out], dim=-1),
@@ -410,7 +415,9 @@ class MQAModel(BaseModule):
             out = self.W_out(h_V_out)
 
         # aggregate node vectors to graph
-        out = scatter_mean(out, batch.batch, dim=0)
+        g.ndata["out"] = out
+        out = dgl.mean_nodes(g, "out")  # [bs, num_outputs]
+
         return self.dense(out).squeeze(-1) + 0.5
 
 
@@ -475,7 +482,7 @@ class GATModel(BaseModule):
         """Perform the forward pass.
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
 
         Returns:
             logits
@@ -484,28 +491,28 @@ class GATModel(BaseModule):
         logits = self._forward(x)
         return logits
 
-    def _forward(self, batch):
+    def _forward(self, g):
         """Helper function to perform the forward pass.
 
         Args:
-            batch: torch_geometric.data.Data
+            g: dgl.graph
 
         Returns:
             logits
         """
-        edge_index = batch.edge_index
-        seq = batch.seq
+        seq = g.ndata["seq"]
         # one-hot encodings
         node_embeddings = self.W_s(seq)  # [n_nodes, 20]
         # GAT forward
-        conv1_out = self.conv1(node_embeddings, edge_index)
-        conv2_out = self.conv2(conv1_out, edge_index)
-        conv3_out = self.conv3(conv2_out, edge_index)
+        conv1_out = self.conv1(g, node_embeddings).view(-1, 512)
+        conv2_out = self.conv2(g, conv1_out).view(-1, 512)
+        conv3_out = self.conv3(g, conv2_out).view(-1, 1024)
         # residual concat
         out = torch.cat((conv1_out, conv2_out, conv3_out), dim=-1)
         out = self.dropout(self.relu(out))  # [n_nodes, 2048]
         # aggregate node vectors to graph
-        out = scatter_mean(out, batch.batch, dim=0)  # [bs, 2048]
+        g.ndata["out"] = out
+        out = dgl.mean_nodes(g, "out")  # [bs, 2048]
         return self.dense(out).squeeze(-1) + 0.5  # [bs]
 
 
@@ -633,7 +640,7 @@ class BertMQAModel(BaseModule):
         """Forward pass and computation of the loss.
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
             batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
         Returns:
@@ -649,7 +656,7 @@ class BertMQAModel(BaseModule):
         """Perform the forward pass.
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
             input_ids: IDs of the embeddings to be used in the model.
 
         Returns:
@@ -659,25 +666,25 @@ class BertMQAModel(BaseModule):
         logits = self._forward(x, input_ids=input_ids)
         return logits
 
-    def _forward(self, batch, input_ids=None):
+    def _forward(self, g, input_ids=None):
         """
         Helper function to perform the forward pass.
 
         Args:
-            batch: torch_geometric.data.Data
+            g: dgl.graph
             input_ids: IDs of the embeddings to be used in the model.
         Returns:
             logits
         """
-        h_V = (batch.node_s, batch.node_v)
-        h_E = (batch.edge_s, batch.edge_v)
-        edge_index = batch.edge_index
-
-        batch_size = batch.num_graphs
-
+        h_V = (g.ndata["node_s"], g.ndata["node_v"])
+        h_E = (g.edata["edge_s"], g.edata["edge_v"])
         if input_ids is None:
-            input_ids = batch.input_ids.reshape(batch_size, -1)
-        attention_mask = batch.attention_mask.reshape(batch_size, -1)
+            input_ids = torch.stack([graph.input_ids for graph in g.g_list])
+            input_ids = input_ids.to(g.device)
+        attention_mask = torch.stack(
+            [graph.attention_mask for graph in g.g_list]
+        )
+        attention_mask = attention_mask.to(g.device)
 
         node_embeddings = _bert_forward(
             self.bert_model, self.embeding_dim, input_ids, attention_mask
@@ -688,16 +695,18 @@ class BertMQAModel(BaseModule):
 
         h_V = self.W_v(h_V)
         h_E = self.W_e(h_E)
+        g.ndata["node_s"], g.ndata["node_v"] = h_V[0], h_V[1]
+        g.edata["edge_s"], g.edata["edge_v"] = h_E[0], h_E[1]
         if not self.residual:
             for layer in self.layers:
-                h_V = layer(h_V, edge_index, h_E)
+                h_V = layer(g)
             out = self.W_out(h_V)
         else:
-            h_V_out = []  # collect outputs from GVPConvLayers
-            h_V_in = h_V
+            h_V_out = []  # collect outputs from all GVP Conv layers
             for layer in self.layers:
-                h_V_out.append(layer(h_V_in, edge_index, h_E))
-                h_V_in = h_V_out[-1]
+                h_V = layer(g)
+                h_V_out.append(h_V)
+                g.ndata["node_s"], g.ndata["node_v"] = h_V[0], h_V[1]
             # concat outputs from GVPConvLayers (separatedly for s and V)
             h_V_out = (
                 torch.cat([h_V[0] for h_V in h_V_out], dim=-1),
@@ -705,7 +714,8 @@ class BertMQAModel(BaseModule):
             )
             out = self.W_out(h_V_out)
 
-        out = scatter_mean(out, batch.batch, dim=0)
+        g.ndata["out"] = out
+        out = dgl.mean_nodes(g, "out")  # [bs, num_outputs]
         return self.dense(out).squeeze(-1) + 0.5
 
 
@@ -787,7 +797,7 @@ class BertGATModel(BaseModule):
         """Forward pass and computation of the loss.
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
             batch_idx: index of current batch
             prefix: Prefix for the loss: XXX_loss (train, validation, test)
 
@@ -804,7 +814,7 @@ class BertGATModel(BaseModule):
         """Does the forward pass through the model for batch[0]
 
         Args:
-            batch: (torch_geometric.data.Data, targets)
+            batch: (dgl.graph, targets)
 
         Returns:
             Inferenced logits
@@ -813,31 +823,34 @@ class BertGATModel(BaseModule):
         logits = self._forward(x)
         return logits
 
-    def _forward(self, batch):
+    def _forward(self, g):
         """Does the forward pass through the model for batch
 
         Args:
-            batch: torch_geometric.data.Data
+            g: dgl.graph
 
         Returns:
             Inferenced logits
 
         """
-        edge_index = batch.edge_index
-        batch_size = batch.num_graphs
-        input_ids = batch.input_ids.reshape(batch_size, -1)
-        attention_mask = batch.attention_mask.reshape(batch_size, -1)
+        input_ids = torch.stack([graph.input_ids for graph in g.g_list])
+        input_ids = input_ids.to(g.device)
+        attention_mask = torch.stack(
+            [graph.attention_mask for graph in g.g_list]
+        )
+        attention_mask = attention_mask.to(g.device)
 
         node_embeddings = _bert_forward(
             self.bert_model, self.embeding_dim, input_ids, attention_mask
         )
         # GAT forward
-        conv1_out = self.conv1(node_embeddings, edge_index)
-        conv2_out = self.conv2(conv1_out, edge_index)
-        conv3_out = self.conv3(conv2_out, edge_index)
+        conv1_out = self.conv1(g, node_embeddings).view(-1, 512)
+        conv2_out = self.conv2(g, conv1_out).view(-1, 512)
+        conv3_out = self.conv3(g, conv2_out).view(-1, 1024)
         # residual concat
         out = torch.cat((conv1_out, conv2_out, conv3_out), dim=-1)
         out = self.dropout(self.relu(out))  # [n_nodes, 2048]
         # aggregate node vectors to graph
-        out = scatter_mean(out, batch.batch, dim=0)  # [bs, 2048]
+        g.ndata["out"] = out
+        out = dgl.mean_nodes(g, "out")  # [bs, 2048]
         return self.dense(out).squeeze(-1) + 0.5  # [bs]

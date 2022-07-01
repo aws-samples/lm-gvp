@@ -17,7 +17,6 @@ from sklearn import metrics
 from scipy import stats
 
 import torch
-import torch_geometric
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -72,7 +71,7 @@ def init_model(
     """Initialize a model.
 
     Args:
-        datum: a Data object to determine input shapes for GVP-based models.
+        datum: a dgl.graph object to determine input shapes for GVP-based models.
         model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']
         num_outputs: number of output units
         weights: label weights for multi-output models
@@ -91,9 +90,15 @@ def init_model(
             **kwargs
         )
     elif model_name in ("gvp", "bert_gvp"):
-        node_in_dim = (datum.node_s.shape[1], datum.node_v.shape[1])
+        node_in_dim = (
+            datum.ndata["node_s"].shape[1],
+            datum.ndata["node_v"].shape[1],
+        )
         node_h_dim = (kwargs["node_h_dim_s"], kwargs["node_h_dim_v"])
-        edge_in_dim = (datum.edge_s.shape[1], datum.edge_v.shape[1])
+        edge_in_dim = (
+            datum.edata["edge_s"].shape[1],
+            datum.edata["edge_v"].shape[1],
+        )
         edge_h_dim = (kwargs["edge_h_dim_s"], kwargs["edge_h_dim_v"])
         print("node_h_dim:", node_h_dim)
         print("edge_h_dim:", edge_h_dim)
@@ -185,22 +190,21 @@ def main(args):
     )
     print("Data loaded:", len(train_dataset), len(valid_dataset))
     # 2. Prepare data loaders
-    if MODEL_TYPES[args.model_name] == "seq":
-        DataLoader = torch.utils.data.DataLoader
-    else:
-        DataLoader = torch_geometric.data.DataLoader
+    DataLoader = torch.utils.data.DataLoader
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.bs,
         shuffle=True,
         num_workers=args.num_workers,
+        collate_fn=train_dataset.collate_fn,
     )
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=args.bs,
         shuffle=False,
         num_workers=args.num_workers,
+        collate_fn=train_dataset.collate_fn,
     )
     # 3. Prepare model
     datum = None
@@ -257,6 +261,7 @@ def main(args):
         batch_size=args.bs,
         shuffle=False,
         num_workers=args.num_workers,
+        collate_fn=test_dataset.collate_fn,
     )
     scores = evaluate(model, test_loader, args.task)
     # save scores to file
