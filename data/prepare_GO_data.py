@@ -19,11 +19,11 @@ from joblib import Parallel, delayed
 from Bio.PDB import PDBParser, MMCIFParser
 from Bio.PDB.Polypeptide import is_aa
 
-from contact_map_utils import (
+from .contact_map_utils import (
     parse_structure,
     three_to_one_standard,
 )
-import xpdb
+from .xpdb import SloppyStructureBuilder
 
 DATA_DIR = "/home/ec2-user/SageMaker/efs/paper_data/DeepFRI_GO_PDB"
 OUTPUT_DIR = "/home/ec2-user/SageMaker/efs/gvp-datasets/DeepFRI_GO"
@@ -134,13 +134,13 @@ if __name__ == "__main__":
     pdb_parser = PDBParser(
         QUIET=True,
         PERMISSIVE=True,
-        structure_builder=xpdb.SloppyStructureBuilder(),
+        structure_builder=SloppyStructureBuilder(),
     )
 
     # CIF parser
     cif_parser = MMCIFParser(
         QUIET=True,
-        structure_builder=xpdb.SloppyStructureBuilder(),
+        structure_builder=SloppyStructureBuilder(),
     )
 
     # 1. Load metadata

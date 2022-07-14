@@ -20,8 +20,8 @@ from joblib import Parallel, delayed
 from Bio.PDB import PDBParser
 from Bio.PDB.Polypeptide import three_to_one
 
-import xpdb
-from contact_map_utils import parse_pdb_structure
+from .xpdb import SloppyStructureBuilder
+from .contact_map_utils import parse_pdb_structure
 
 
 def parse_args():
@@ -131,7 +131,7 @@ def main():
     sloppyparser = PDBParser(
         QUIET=True,
         PERMISSIVE=True,
-        structure_builder=xpdb.SloppyStructureBuilder(),
+        structure_builder=SloppyStructureBuilder(),
     )
 
     # 2. Parallel parsing structures and converting to protein records
