@@ -287,12 +287,12 @@ if __name__ == "__main__":
 
     # Additional params
     # dataset params
-    parser.add_argument(
-        "--task",
-        help="Task to perform: ['flu', 'protease', 'cc', 'bp', 'mf']",
-        type=str,
-        required=True,
-    )
+    #parser.add_argument(
+    #    "--task",
+    #    help="Task to perform: ['flu', 'protease', 'cc', 'bp', 'mf']",
+    #    type=str,
+    #    required=True,
+    #)
     # model hparams
     parser.add_argument(
         "--node_h_dim_s", type=int, default=100, help="node_h_dim[0] in GVP"

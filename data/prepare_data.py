@@ -80,10 +80,14 @@ def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
     """
     output = {}
     # get AA sequence in the pdb structure
-    pdb_seq = "".join(
-        [three_to_one(res.get_resname()) for res in struct.get_residues()]
-    )
+    try:
+        pdb_seq = "".join(
+            [three_to_one(res.get_resname()) for res in struct.get_residues()]
+        )
+    except:
+        raise RuntimeError(f"could grab pdb for {struct}")
     output["seq"] = pdb_seq
+    print(pdb_seq)
     # get the atom coords
     coords = np.asarray(
         [
@@ -109,6 +113,8 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
     Return:
         Dictionary with the pdb sequence, atom 3D coordinates and name.
     """
+    print(sequence)
+    print(pdb_file_path)
     struct = parse_pdb_structure(parser, sequence, pdb_file_path)
     record = structure_to_coords(struct, name=name)
     return record

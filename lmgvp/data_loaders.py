@@ -66,6 +66,8 @@ def preprocess_seqs(tokenizer, dataset):
         rec["attention_mask"] = encodings["attention_mask"][i]
     return dataset
 
+def load_FunSoc_labels():
+    json.load(open("/home/felix/PycharmProjects/lm-gvp-funsocs/data/"))
 
 def load_GO_labels(task="cc"):
     """Load the labels in the GO dataset
@@ -116,11 +118,10 @@ def add_GO_labels(dataset, prot2annot, go_ont="cc"):
     return dataset
 
 
-def get_dataset(task="", model_type="", split="train"):
+def get_dataset(model_type="", split="train"):
     """Load data from files, then transform into appropriate
     Dataset objects.
     Args:
-        task: one of ['cc', 'bp', 'mf', 'protease', 'flu']
         model_type: one of ['seq', 'struct', 'seq_struct']
         split: one of ['train', 'valid', 'test']
 
