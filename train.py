@@ -177,8 +177,7 @@ def main(args):
     """
     pl.seed_everything(42, workers=True)
     # 1. Load data
-    train_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="train"
+    train_dataset = data_loaders.get_dataset(MODEL_TYPES[args.model_name], split="train"
     )
     valid_dataset = data_loaders.get_dataset(
         args.task, MODEL_TYPES[args.model_name], split="valid"

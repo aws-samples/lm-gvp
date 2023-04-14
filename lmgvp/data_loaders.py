@@ -18,12 +18,11 @@ from lmgvp.datasets import (
 )
 from lmgvp.deepfrier_utils import load_GO_annot
 
-DATA_ROOT_DIR = "/home/ec2-user/SageMaker/efs"
+DATA_ROOT_DIR = "/home/felix/"
 
 
 def load_gvp_data(
     gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR),
-    task="protease/with_tags",
     split="train",
     seq_only=False,
 ):
@@ -39,7 +38,7 @@ def load_gvp_data(
     Retrun:
         Dictionary containing the GVP dataset of proteins.
     """
-    filename = os.path.join(gvp_data_dir, task, f"proteins_{split}.json")
+    filename = os.path.join(gvp_data_dir, f"proteins_{split}.json")
     dataset = json.load(open(filename, "rb"))
     if seq_only:
         # delete the "coords" in data objects
@@ -67,8 +66,12 @@ def preprocess_seqs(tokenizer, dataset):
     return dataset
 
 def load_FunSoc_labels():
-    json.load(open("/home/felix/PycharmProjects/lm-gvp-funsocs/data/"))
-
+    json_of_data = json.load(open("/home/felix/PycharmProjects/lm-gvp-funsocs/data/mydata.csv"))
+    prot2funsoc = {}
+    for rec in json_of_data:
+        prot2funsoc[rec["name"]] = rec["target"]
+    funsocs_amount = 32
+    return prot2funsoc, funsocs_amount
 def load_GO_labels(task="cc"):
     """Load the labels in the GO dataset
 
@@ -87,7 +90,7 @@ def load_GO_labels(task="cc"):
     goterms = goterms[task]
     gonames = gonames[task]
     num_outputs = len(goterms)
-
+    # task =cc
     # computing weights for imbalanced go classes
     class_sizes = counts[task]
     mean_class_size = np.mean(class_sizes)
@@ -139,30 +142,29 @@ def get_dataset(model_type="", split="train"):
         )
 
     # Load data from files
-    if task in ("cc", "bp", "mf"):  # GO dataset
+   # if task in ("cc", "bp", "mf"):  # GO dataset
         # load labels
-        prot2annot, num_outputs, pos_weights = load_GO_labels(task)
+    prot2funsoc, funsocs_amount = load_FunSoc_labels()
+    #prot2annot, num_outputs, pos_weights = load_GO_labels(task)
         # load features
-        dataset = load_gvp_data(
-            task="DeepFRI_GO", split=split, seq_only=seq_only
-        )
-        add_GO_labels(dataset, prot2annot, go_ont=task)
-    else:
-        data_dir = {"protease": "protease/with_tags", "flu": "Fluorescence"}
-        dataset = load_gvp_data(
-            task=data_dir[task], split=split, seq_only=seq_only
-        )
-        num_outputs = 1
-        pos_weights = None
+    dataset = load_gvp_data(split=split, seq_only=seq_only)
+    #add_GO_labels(dataset, prot2annot, go_ont=task)
+    #else:
+    #    data_dir = {"protease": "protease/with_tags", "flu": "Fluorescence"}
+    #    dataset = load_gvp_data(
+    #        task=data_dir[task], split=split, seq_only=seq_only
+    #    )
+    #    num_outputs = 1
+    #    pos_weights = None
 
     # Convert data into Dataset objects
     if model_type == "seq":
-        if num_outputs == 1:
-            targets = torch.tensor(
-                [obj["target"] for obj in dataset], dtype=torch.float32
-            ).unsqueeze(-1)
-        else:
-            targets = [obj["target"] for obj in dataset]
+        #if num_outputs == 1:
+        #    targets = torch.tensor(
+        #        [obj["target"] for obj in dataset], dtype=torch.float32
+        #    ).unsqueeze(-1)
+        #else:
+        targets = [obj["target"] for obj in dataset]
         dataset = SequenceDatasetWithTarget(
             [obj["seq"] for obj in dataset],
             targets,
@@ -170,12 +172,12 @@ def get_dataset(model_type="", split="train"):
             preprocess=True,
         )
     else:
-        if num_outputs == 1:
+       # if num_outputs == 1:
             # convert target to f32 [1] tensor
-            for obj in dataset:
-                obj["target"] = torch.tensor(
-                    obj["target"], dtype=torch.float32
-                ).unsqueeze(-1)
+       #     for obj in dataset:
+       #         obj["target"] = torch.tensor(
+       #             obj["target"], dtype=torch.float32
+       #         ).unsqueeze(-1)
         if model_type == "struct":
             dataset = ProteinGraphDatasetWithTarget(dataset, preprocess=False)
         elif model_type == "seq_struct":
@@ -184,6 +186,6 @@ def get_dataset(model_type="", split="train"):
                 dataset, preprocess=False
             )
 
-    dataset.num_outputs = num_outputs
-    dataset.pos_weights = pos_weights
+    #dataset.num_outputs = num_outputs
+    #dataset.pos_weights = pos_weights
     return dataset
