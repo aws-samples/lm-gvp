@@ -6,6 +6,10 @@ Pytorch map style dataset classes for proteins (seq, struct, seq+struct).
 Modified from https://github.com/drorlab/gvp-pytorch/blob/main/gvp/data.py
 """
 import math
+import multiprocessing
+import os
+import threading
+from queue import Queue
 import tqdm
 import numpy as np
 import torch
@@ -13,7 +17,8 @@ import torch.utils.data as data
 import torch.nn.functional as F
 import torch_geometric
 import torch_cluster
-from lmgvp.utils import prep_seq
+
+
 
 
 def _normalize(tensor, dim=-1):
@@ -61,6 +66,7 @@ def _rbf(D, D_min=0.0, D_max=20.0, D_count=16, device="cpu"):
     return RBF
 
 
+
 class BaseProteinGraphDataset(data.Dataset):
     """Dataset for the Base Protein Graph."""
 
@@ -68,9 +74,9 @@ class BaseProteinGraphDataset(data.Dataset):
         self,
         data_list,
         num_positional_embeddings=16,
-        top_k=30,
+        top_k=10,
         num_rbf=16,
-        device="cpu",
+        device="cuda",
         preprocess=True,
     ):
         """
@@ -92,6 +98,7 @@ class BaseProteinGraphDataset(data.Dataset):
 
         self.data_list = data_list
         self.top_k = top_k
+        self.queue = []
         self.num_rbf = num_rbf
         self.num_positional_embeddings = num_positional_embeddings
         self.device = device
@@ -217,110 +224,6 @@ class BaseProteinGraphDataset(data.Dataset):
         return vec
 
 
-class StandardProteinGraphDataset(BaseProteinGraphDataset):
-    """
-    Take care of encoding non-standard AA (represented as "X") in
-    self.letter_to_num
-    """
-
-    def __init__(self, data_list, **kwargs):
-        """
-        Initializes the dataset
-
-        Args:
-            data_list: List containint the initial data
-
-        Returns:
-            None
-        """
-        self.letter_to_num = {
-            "C": 4,
-            "D": 3,
-            "S": 15,
-            "Q": 5,
-            "K": 11,
-            "I": 9,
-            "P": 14,
-            "T": 16,
-            "F": 13,
-            "A": 0,
-            "G": 7,
-            "H": 8,
-            "E": 6,
-            "L": 10,
-            "R": 1,
-            "W": 17,
-            "V": 19,
-            "N": 2,
-            "Y": 18,
-            "M": 12,
-            "X": 0,
-        }
-        self.num_to_letter = {v: k for k, v in self.letter_to_num.items()}
-        super(StandardProteinGraphDataset, self).__init__(data_list, **kwargs)
-
-    def _featurize_as_graph(self, protein):
-        """Featurizes the protein information as a graph for the GNN
-
-        Args:
-            protein: Dictionary with the protein seq, coord and name.
-
-        Returns:
-            Torch geometric data instance representing with the protein information
-        """
-        name = protein["name"]
-        with torch.no_grad():
-            coords = torch.as_tensor(
-                protein["coords"], device=self.device, dtype=torch.float32
-            )
-            seq = torch.as_tensor(
-                [self.letter_to_num[a] for a in protein["seq"]],
-                device=self.device,
-                dtype=torch.long,
-            )
-
-            mask = torch.isfinite(coords.sum(dim=(1, 2)))
-            coords[~mask] = np.inf
-
-            X_ca = coords[:, 1]
-            edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
-
-            pos_embeddings = self._positional_embeddings(edge_index)
-            E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
-            rbf = _rbf(
-                E_vectors.norm(dim=-1),
-                D_count=self.num_rbf,
-                device=self.device,
-            )
-
-            dihedrals = self._dihedrals(coords)
-            orientations = self._orientations(X_ca)
-            sidechains = self._sidechains(coords)
-
-            node_s = dihedrals
-            node_v = torch.cat(
-                [orientations, sidechains.unsqueeze(-2)], dim=-2
-            )
-            edge_s = torch.cat([rbf, pos_embeddings], dim=-1)
-            edge_v = _normalize(E_vectors).unsqueeze(-2)
-
-            node_s, node_v, edge_s, edge_v = map(
-                torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
-            )
-
-        return torch_geometric.data.Data(
-            x=X_ca,
-            seq=seq,
-            name=name,
-            node_s=node_s,
-            node_v=node_v,
-            edge_s=edge_s,
-            edge_v=edge_v,
-            edge_index=edge_index,
-            mask=mask,
-        )
-
-
 class ProteinGraphDataset(BaseProteinGraphDataset):
     """
     A map-syle `torch.utils.data.Dataset` which transforms JSON/dictionary
@@ -356,7 +259,7 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
         """
         super(ProteinGraphDataset, self).__init__(data_list, **kwargs)
 
-    def _featurize_as_graph(self, protein):
+    def _featurize_as_graph(self, protein, index=None, q=None):
         """Featurizes the protein information as a graph for the GNN
 
         Args:
@@ -368,38 +271,54 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
         name = protein["name"]
         input_ids = protein["input_ids"]
         attention_mask = protein["attention_mask"]
-
-        with torch.no_grad():
-            coords = torch.as_tensor(
+#        with torch.no_grad():
+        coords = torch.as_tensor(
                 protein["coords"], device=self.device, dtype=torch.float32
             )
 
-            mask = torch.isfinite(coords.sum(dim=(1, 2)))
-            coords[~mask] = np.inf
+        mask = torch.isfinite(coords.sum(dim=(1, 2)))
+        coords[~mask] = np.inf
 
-            X_ca = coords[:, 1]
-            edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
-
-            pos_embeddings = self._positional_embeddings(edge_index)
-            E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
-            rbf = _rbf(
+        X_ca = coords[:, 1]
+       # edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
+        xs = []
+        p_dist = torch.nn.PairwiseDistance(p=2)
+           # index1=-1
+        dist = torch.cdist(X_ca, X_ca, p=2)
+        edge_index = (dist<10).nonzero().t()
+      #  [[xs.append(torch.as_tensor([index1, index2], device=self.device)) for index2, x2 in enumerate(X_ca) if index1!=index2 and p_dist(x1,x2) < 10]  for index1, x1 in enumerate(X_ca)]
+         #   for x1 in X_ca:
+         #       index1 += 1
+         #       index2 = -1
+         #       for x2 in X_ca:
+         #           index2 += 1
+         #           if index1 == index2:
+         #               continue
+         #           elif torch.sqrt(torch.sum((x1 - x2) * 2)) < 10:
+         #               xs.append(torch.as_tensor([index1, index2], device=self.device))
+       # if len(xs) == 0:
+       #     raise RuntimeError("no edges")
+       # edge_index = torch.stack(xs,dim=0).t()
+        pos_embeddings = self._positional_embeddings(edge_index)
+        E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
+        rbf = _rbf(
                 E_vectors.norm(dim=-1),
                 D_count=self.num_rbf,
                 device=self.device,
             )
 
-            dihedrals = self._dihedrals(coords)
-            orientations = self._orientations(X_ca)
-            sidechains = self._sidechains(coords)
+        dihedrals = self._dihedrals(coords)
+        orientations = self._orientations(X_ca)
+        sidechains = self._sidechains(coords)
 
-            node_s = dihedrals
-            node_v = torch.cat(
+        node_s = dihedrals
+        node_v = torch.cat(
                 [orientations, sidechains.unsqueeze(-2)], dim=-2
             )
-            edge_s = torch.cat([rbf, pos_embeddings], dim=-1)
-            edge_v = _normalize(E_vectors).unsqueeze(-2)
+        edge_s = torch.cat([rbf, pos_embeddings], dim=-1)
+        edge_v = _normalize(E_vectors).unsqueeze(-2)
 
-            node_s, node_v, edge_s, edge_v = map(
+        node_s, node_v, edge_s, edge_v = map(
                 torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
             )
 
@@ -415,100 +334,13 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             edge_index=edge_index,
             mask=mask,
         )
+        if index is not None:
+          #  data.share_memory_()
+           # q.put(data)
+            torch.save(data, str(index)+".tmp")
+            #self.queue.append(data)
+            return None
         return data
-
-
-# dataset classes with targets:
-class SequenceDatasetWithTarget(data.Dataset):
-    """Intended for all sequence-only models."""
-
-    def __init__(self, sequences, labels, tokenizer=None, preprocess=True):
-        """Initializes the dataset
-        Args:
-            sequences: list of strings
-            labels: tensor of labels [n_samples, n_labels]
-            tokenizer: BertTokenizer
-            preprocess: Bool. Wheather or not to process the sequences.
-
-        Return:
-            None
-        """
-        self.sequences = sequences
-        self.labels = labels
-        self.tokenizer = tokenizer
-        if preprocess:
-            self._preprocess()
-
-    def _preprocess(self):
-        """Preprocess sequences to input_ids and attention_mask
-
-        Args:
-
-        Return:
-            None
-        """
-        print("Preprocessing seqeuence data...")
-        self.sequences = [prep_seq(seq) for seq in self.sequences]
-        encodings = self.tokenizer(
-            self.sequences, return_tensors="pt", padding=True
-        )
-        self.encodings = {
-            key: val
-            for key, val in encodings.items()
-            if key in ("input_ids", "attention_mask")
-        }
-
-    def __getitem__(self, idx):
-        """Retrieve protein information by index.
-
-        Args:
-            idx: Integer representing the position of the protein.
-
-        Return:
-            Dictionary with `input_ids`, `attention_mask` and `labels`
-        """
-        return {
-            "input_ids": self.encodings["input_ids"][idx],
-            "attention_mask": self.encodings["attention_mask"][idx],
-            "labels": self.labels[idx],
-        }
-
-    def __len__(self):
-        """Lenght of the dataset.
-
-        Args:
-
-        Return:
-            Integer representing the length of the dataset.
-        """
-        return len(self.sequences)
-
-
-class ProteinGraphDatasetWithTarget(StandardProteinGraphDataset):
-    """Thin wrapper for ProteinGraphDataset to include targets.
-    Intended for all (structure-only) GNN models."""
-
-    def __init__(self, data_list, **kwargs):
-        super(ProteinGraphDatasetWithTarget, self).__init__(
-            data_list, **kwargs
-        )
-
-    def __getitem__(self, i):
-        if not isinstance(self.data_list[i], tuple):
-            self.data_list[i] = (
-                self._featurize_as_graph(self.data_list[i]),
-                self.data_list[i]["target"],
-            )
-        return self.data_list[i]
-
-    def _preprocess(self):
-        """Preprocess all the records in `data_list` with
-        `_featurize_as_graph`"""
-        for i in tqdm.tqdm(range(len(self.data_list))):
-            self.data_list[i] = (
-                self._featurize_as_graph(self.data_list[i]),
-                self.data_list[i]["target"],
-            )
 
 
 class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
@@ -538,9 +370,15 @@ class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
             None
         """
         if not isinstance(self.data_list[idx], tuple):
+            #manager = multiprocessing.Manager()
+           # q = manager.Queue()
+           # thread = torch.multiprocessing.Process(target=self._featurize_as_graph, args=[self.data_list[idx], q])
+           # thread.start()
+           # thread.join()
             self.data_list[idx] = (
                 self._featurize_as_graph(self.data_list[idx]),
-                self.data_list[idx]["target"],
+           #     q.get(),
+                self.data_list[idx]["target"]
             )
         return self.data_list[idx]
 
@@ -553,8 +391,39 @@ class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
         Returns:
             None
         """
+        #for i in tqdm.tqdm(range(len(self.data_list))):
+        manager = multiprocessing.Manager()
+        q = manager.Queue()
+        #    self.data_list[i] = (
+       # my_pool= multiprocessing.pool.ThreadPool(30)
+        #torch.multiprocessing.Man
+        threads = [torch.multiprocessing.Process(target= self._featurize_as_graph, args=[self.data_list[i], i]) for i in tqdm.tqdm(range(len(self.data_list)))]
+       # started = [ thread.start() for thread in tqdm.tqdm(threads) if count<=30:]
+       # data_graphs =my_pool.map_async(self._featurize_as_graph, self.data_list)
+       # for index, graph in  tqdm.tqdm(enumerate(data_graphs.get())):
+       #     self.data_list[index] = (graph,
+       #     self.data_list[index]["target"])
+     #   for i in tqdm.tqdm(range(len(self.data_list))):
+     #       self.data_list[i] = (
+     #           data_graphs[i] ,
+     #           self.data_list[i]["target"]
+     #       )
+        started_threads = []
+        for thread in tqdm.tqdm(threads):
+            if len(started_threads )<=os.cpu_count() :
+                thread.start()
+                started_threads.append(thread)
+            else:
+                [threads.join() for threads in started_threads]
+
+                started_threads = []
         for i in tqdm.tqdm(range(len(self.data_list))):
             self.data_list[i] = (
-                self._featurize_as_graph(self.data_list[i]),
-                self.data_list[i]["target"],
-            )
+                       torch.load(str(i)+".tmp"),
+                       self.data_list[i]["target"]
+                   )
+        os.system("rm -r *.tmp")
+      #  [thread.join() for thread in tqdm.tqdm(threads) ]
+        #             self._featurize_as_graph(self.data_list[i]),
+         #       self.data_list[i]["target"],
+         #   )

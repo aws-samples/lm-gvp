@@ -12,6 +12,8 @@ import json
 import os
 import argparse
 from collections import defaultdict
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 
@@ -87,7 +89,9 @@ def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
     except:
         raise RuntimeError(f"could grab pdb for {struct}")
     output["seq"] = pdb_seq
-    print(pdb_seq)
+    #print(pdb_seq)
+    if len(pdb_seq) > 750:
+        return
     # get the atom coords
     coords = np.asarray(
         [
@@ -113,8 +117,14 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
     Return:
         Dictionary with the pdb sequence, atom 3D coordinates and name.
     """
-    print(sequence)
-    print(pdb_file_path)
+  #  print(sequence)
+   # print(Path(pdb_file_path).name)
+    #if Path(pdb_file_path).name == "6RWY.pdb":
+    #    print("im right here BIIIITIHCHSDHFIUH")
+    #    print(sequence)
+    #if len(sequence) >=700:
+    #    print("returning nothing")
+    #    return
     struct = parse_pdb_structure(parser, sequence, pdb_file_path)
     record = structure_to_coords(struct, name=name)
     return record
@@ -154,6 +164,8 @@ def main():
     # 3. Segregate records by splits
     splitted_records = defaultdict(list)
     for i, rec in enumerate(records):
+        if rec is None:
+            continue
         row = df.iloc[i]
         target = row[args.target_variable]
         split = row["split"]

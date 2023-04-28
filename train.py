@@ -5,17 +5,17 @@
 Train seq-only, struct-only or seq+struct model on Fluores, protease or GO
 datasets using Pytorch-lightning.
 """
-
+import finetuning_scheduler
 import os
 import json
 from pprint import pprint
 import argparse
 from collections.abc import Sequence
-
 import numpy as np
+from pytorch_lightning.strategies import DDPStrategy
 from sklearn import metrics
 from scipy import stats
-
+from finetuning_scheduler import FinetuningScheduler
 import torch
 import torch_geometric
 
@@ -24,48 +24,31 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from lmgvp.modules import (
-    BertFinetuneModel,
-    MQAModel,
-    BertMQAModel,
-    GATModel,
     BertGATModel,
+    BertMQAModel
 )
 from lmgvp import deepfrier_utils, data_loaders
 from lmgvp.transfer import load_state_dict_to_model
 
+torch.backends.cudnn.allow_t32 = True
+
 # to determine model type based on model name
 MODEL_TYPES = {
-    "gvp": "struct",
-    "bert": "seq",
-    "bert_gvp": "seq_struct",
-    "gat": "struct",
     "bert_gat": "seq_struct",
 }
 
 # mapping model names to constructors
 MODEL_CONSTRUCTORS = {
-    "gvp": MQAModel,
-    "bert": BertFinetuneModel,
-    "bert_gvp": BertMQAModel,
-    "gat": GATModel,
     "bert_gat": BertGATModel,
 }
 
-# to determine problem type based on task
-IS_CLASSIFY = {
-    "flu": False,
-    "protease": False,
-    "cc": True,
-    "mf": True,
-    "bp": True,
-}
 
 
 def init_model(
     datum=None,
     model_name="gvp",
-    num_outputs=1,
-    classify=False,
+    num_outputs=21,
+    classify=True,
     weights=None,
     **kwargs
 ):
@@ -81,11 +64,11 @@ def init_model(
         model object (One of: bert, gat, bert_gat, gvp or bert_gvp)
 
     """
-    print("Init {} model with args:".format(model_name))
+    print("Init {} model with args:".format("BertGAT"))
     pprint(kwargs)
     if model_name in ("bert", "gat", "bert_gat"):
-        model = MODEL_CONSTRUCTORS[model_name](
-            num_outputs=num_outputs,
+        model = BertGATModel(
+            num_outputs=21,
             weights=weights,
             classify=classify,
             **kwargs
@@ -97,7 +80,7 @@ def init_model(
         edge_h_dim = (kwargs["edge_h_dim_s"], kwargs["edge_h_dim_v"])
         print("node_h_dim:", node_h_dim)
         print("edge_h_dim:", edge_h_dim)
-        model = MODEL_CONSTRUCTORS[model_name](
+        model = BertMQAModel(
             node_in_dim=node_in_dim,
             node_h_dim=node_h_dim,
             edge_in_dim=edge_in_dim,
@@ -112,7 +95,7 @@ def init_model(
     return model
 
 
-def evaluate(model, data_loader, task):
+def evaluate(model, data_loader):
     """Evaluate model on dataset and return metrics.
 
     Args:
@@ -145,24 +128,14 @@ def evaluate(model, data_loader, task):
     y_preds = torch.vstack(y_preds).numpy()
     y_true = torch.vstack(y_true).numpy()
     print(y_preds.shape, y_true.shape)
-    if task in ("cc", "bp", "mf"):
+ #   if task in ("cc", "bp", "mf"):
         # multi-label classification
-        f_max, micro_aupr = deepfrier_utils.evaluate_multilabel(
-            y_true, y_preds
-        )
-        scores = {"f_max": f_max, "aupr": micro_aupr}
-        print("F_max = {:1.3f}".format(scores["f_max"]))
-        print("AUPR = {:1.3f}".format(scores["aupr"]))
-    else:
-        # single task regression
-        mse = metrics.mean_squared_error(y_true, y_preds)
-        rmse = np.sqrt(mse)
-        r2 = metrics.r2_score(y_true, y_preds)
-        rho, _ = stats.spearmanr(y_true, y_preds)
-        scores = {"mse": float(mse), "rmse": float(rmse), "r2": r2, "rho": rho}
-        for key, score in scores.items():
-            print("{} = {:1.3f}".format(key, score))
-    return scores
+    f_max, micro_aupr = deepfrier_utils.evaluate_multilabel(
+        y_true, y_preds
+    )
+    scores = {"f_max": f_max, "aupr": micro_aupr}
+    print("F_max = {:1.3f}".format(scores["f_max"]))
+    print("AUPR = {:1.3f}".format(scores["aupr"]))
 
 
 def main(args):
@@ -177,41 +150,37 @@ def main(args):
     """
     pl.seed_everything(42, workers=True)
     # 1. Load data
-    train_dataset = data_loaders.get_dataset(MODEL_TYPES[args.model_name], split="train"
+    train_dataset = data_loaders.get_dataset(split="train"
     )
-    valid_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="valid"
-    )
+    valid_dataset = data_loaders.get_dataset(split="valid")
     print("Data loaded:", len(train_dataset), len(valid_dataset))
     # 2. Prepare data loaders
-    if MODEL_TYPES[args.model_name] == "seq":
-        DataLoader = torch.utils.data.DataLoader
-    else:
-        DataLoader = torch_geometric.data.DataLoader
+    DataLoader = torch_geometric.loader.DataLoader
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.bs,
         shuffle=True,
         num_workers=args.num_workers,
+        pin_memory=True
     )
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=args.bs,
         shuffle=False,
         num_workers=args.num_workers,
+        pin_memory=True
     )
     # 3. Prepare model
-    datum = None
-    if MODEL_TYPES[args.model_name] != "seq":
+    #datum = None
         # getting the dims from dataset
-        datum = train_dataset[0][0]
+    datum = train_dataset[0][0]
     dict_args = vars(args)
     model = init_model(
         datum=datum,
-        num_outputs=train_dataset.num_outputs,
-        weights=train_dataset.pos_weights,
-        classify=IS_CLASSIFY[args.task],
+        num_outputs=train_dataset.num_outputs ,
+        weights= train_dataset.pos_weights,
+        classify=True,
         **dict_args
     )
     if args.pretrained_weights:
@@ -227,11 +196,26 @@ def main(args):
     )
     # Init ModelCheckpoint callback, monitoring 'val_loss'
     checkpoint_callback = ModelCheckpoint(monitor="val_loss")
+  #  finetuning_scheduler.FinetuningScheduler()
     # init pl.Trainer
-    trainer = pl.Trainer.from_argparse_args(
-        args,
-        deterministic=True,
-        callbacks=[early_stop_callback, checkpoint_callback],
+ #   pl.Trainer()
+  #  pl.Trainer(benchmark=True)
+    trainer = pl.Trainer(
+        #accelerator='dp',
+        #plugins='ddp_sharded',
+    #    args,
+       # deterministic=True,
+
+        accelerator='gpu',
+        strategy="ddp",
+        devices=1,
+        accumulate_grad_batches=8,
+        enable_checkpointing=True,
+        callbacks=[early_stop_callback, checkpoint_callback],# FinetuningScheduler()],
+        profiler="simple",
+        benchmark=True,
+        precision="bf16"
+
     )
     # train
     trainer.fit(model, train_loader, valid_loader)
@@ -248,28 +232,30 @@ def main(args):
     )
     print("Testing performance on test set")
     # load test data
-    test_dataset = data_loaders.get_dataset(
-        args.task, MODEL_TYPES[args.model_name], split="test"
-    )
+
+    test_dataset = data_loaders.get_dataset(split="test")
     test_loader = DataLoader(
         test_dataset,
         batch_size=args.bs,
         shuffle=False,
         num_workers=args.num_workers,
     )
-    scores = evaluate(model, test_loader, args.task)
+    trainer.test(model, test_loader)
+    #scores = evaluate(model, test_loader)
     # save scores to file
-    json.dump(
-        scores,
-        open(os.path.join(trainer.log_dir, "scores.json"), "w"),
-    )
+   # json.dump(
+   #     scores,
+   #     open(os.path.join(trainer.log_dir, "scores.json"), "w"),
+   # )
     return None
 
 
 if __name__ == "__main__":
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:4096,garbage_collection_threshold:0.6"
+    #torch.multiprocessing.set_start_method('spawn', force=True)  # good solution !!!!
     parser = argparse.ArgumentParser()
     # add all the available trainer options to argparse
-    parser = pl.Trainer.add_argparse_args(parser)
+ #   parser = pl.Trainer.add_argparse_args(parser)
     # figure out which model to use
     parser.add_argument(
         "--model_name",
@@ -279,10 +265,10 @@ if __name__ == "__main__":
     )
 
     # THIS LINE IS KEY TO PULL THE MODEL NAME
-    temp_args, _ = parser.parse_known_args()
+  #  temp_args, _ = parser.parse_known_args()
     # add model specific args
-    model_name = temp_args.model_name
-    parser = MODEL_CONSTRUCTORS[model_name].add_model_specific_args(parser)
+ #   model_name = temp_args.model_name
+    parser = BertGATModel.add_model_specific_args(parser)
 
     # Additional params
     # dataset params
@@ -313,12 +299,12 @@ if __name__ == "__main__":
     )
     # training hparams
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--bs", type=int, default=32, help="batch size")
-    parser.add_argument("--early_stopping_patience", type=int, default=5)
+    parser.add_argument("--bs", type=int, default=2, help="batch size")
+    parser.add_argument("--early_stopping_patience", type=int, default=3)
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=0,
+        default=30,
         help="num_workers used in DataLoader",
     )
 

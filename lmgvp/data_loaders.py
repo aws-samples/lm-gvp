@@ -4,16 +4,17 @@
 """
 Util functions for loading datasets.
 """
+import numpy
 import os
 import json
 import numpy as np
 import torch
-from transformers import BertTokenizer
+from transformers import BertTokenizer, BertModel
 
 from lmgvp.utils import prep_seq
 from lmgvp.datasets import (
-    SequenceDatasetWithTarget,
-    ProteinGraphDatasetWithTarget,
+#    SequenceDatasetWithTarget,
+#    ProteinGraphDatasetWithTarget,
     BertProteinGraphDatasetWithTarget,
 )
 from lmgvp.deepfrier_utils import load_GO_annot
@@ -58,20 +59,91 @@ def preprocess_seqs(tokenizer, dataset):
         Input dataset with `input_ids` and `attention_mask`
     """
     seqs = [prep_seq(rec["seq"]) for rec in dataset]
-    encodings = tokenizer(seqs, return_tensors="pt", padding=True)
-    # add input_ids, attention_mask to the json records
+    encodings = tokenizer(seqs, return_tensors="pt", padding=True, truncation=True, max_length=2000)
+  #  bert = BertModel.from_pretrained("yarongef/DistilProtBert", torch_dtype="auto", ).to("cuda")
+
+  #  return node_embeddings    # add input_ids, attention_mask to the json records
     for i, rec in enumerate(dataset):
         rec["input_ids"] = encodings["input_ids"][i]
         rec["attention_mask"] = encodings["attention_mask"][i]
+     #   node_embeddings = bert(
+     #       encodings["input_ids"][i].unsqueeze(-2), attention_mask=encodings["attention_mask"][i].unsqueeze(-2)
+     #   ).last_hidden_state[:, 1:-1, :]
+     #   attention_masks_1d = encodings["attention_mask"][i][:, 2:].reshape(-1)
+        # remove embeddings from padding nodes
+     #   node_embeddings = node_embeddings.reshape(-1, 1024)[
+     #       attention_masks_1d == 1
+     #       ]
+     #   rec["node_embedding"] = node_embeddings
     return dataset
 
-def load_FunSoc_labels():
-    json_of_data = json.load(open("/home/felix/PycharmProjects/lm-gvp-funsocs/data/mydata.csv"))
+my_dict = {
+    "avirulence_plant_repaired":            np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "antibiotic_resistance_repaired":       np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "counter_immunoglobin_repaired":        np.array([0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "degrade_ecm_repaired":                 np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "development_in_host_repaired":         np.array([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_cell_death_repaired":             np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_cytoskeleton_repaired":           np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_GTPase_repaired":                 np.array([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "resist_oxidative_repaired":            np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "secretion_repaired":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "suppress_detection_repaired":          np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "viral_movement_repaired":              np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "bacterial_counter_signaling_repaired": np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "cytotoxicity_repaired":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
+    "virulence_regulator_repaired":         np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
+    "host_cell_cycle":                      np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+    "viral_counter_signaling_repaird":      np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]),
+    "toxin_synthase_repaired":              np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]),
+    "host_trancription_repaired":           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]),
+    "disable_organ_repaired":               np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]),
+    "secreted_effector_repaired":           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+
+}
+def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR)):
+    filename = os.path.join(gvp_data_dir, f"proteins_{split}.json")
+    json_of_data = json.load(open(filename))
     prot2funsoc = {}
+    funsocs_amount = len(my_dict.keys())
     for rec in json_of_data:
-        prot2funsoc[rec["name"]] = rec["target"]
-    funsocs_amount = 32
-    return prot2funsoc, funsocs_amount
+        targets=numpy.zeros(funsocs_amount)
+        count= 0
+        for target in rec["target"].replace('[','').replace(']','').split(", "):
+            count+=1
+            if count > 2:
+                print(rec["target"])
+            targets =  targets + my_dict.get(target.replace("\'",''))
+        if 2 in targets:
+            print(targets)
+            raise RuntimeError("somehow a 2 got in my labels")
+        prot2funsoc[rec["name"]] =targets
+    classes = open("/media/felix/Research/Data/class_sizes.txt","r")
+    output = classes.readlines()[0]
+    class_weight = numpy.zeros(funsocs_amount).astype("float64")
+    classes = json.loads(output)
+    for funsoc in classes:
+         class_weight += my_dict[funsoc]*(classes[funsoc]/sum(classes.values()))
+    return prot2funsoc, funsocs_amount, torch.from_numpy(class_weight.astype(np.float32))
+
+def add_labels(dataset, prot2soc):
+    """
+    Add GO labels to a dataset
+
+    Args:
+        dataset: list of dict (output from `load_gvp_data`)
+        prot2annot: output from `load_GO_labels`
+        go_ont: String. GO ontology/task to be used. One of: 'cc', 'bp', 'mf'
+
+    Return:
+        Dataset formatted as a list. Where, for each element (dictionary), a `target` field has been added.
+
+    """
+    for rec in dataset:
+        rec["target"] = torch.from_numpy(
+            prot2soc[rec["name"]].astype(np.float32)
+        )
+    return dataset
 def load_GO_labels(task="cc"):
     """Load the labels in the GO dataset
 
@@ -97,7 +169,7 @@ def load_GO_labels(task="cc"):
     pos_weights = mean_class_size / class_sizes
     pos_weights = np.maximum(1.0, np.minimum(10.0, pos_weights))
     # to tensor
-    pos_weights = torch.from_numpy(pos_weights.astype(np.float32))
+    pos_weights = torch.from_numpy(pos_weights.astype(np.float16))
     return prot2annot, num_outputs, pos_weights
 
 
@@ -116,12 +188,12 @@ def add_GO_labels(dataset, prot2annot, go_ont="cc"):
     """
     for rec in dataset:
         rec["target"] = torch.from_numpy(
-            prot2annot[rec["name"]][go_ont].astype(np.float32)
+            prot2annot[rec["name"]][go_ont].astype(np.float16)
         )
     return dataset
 
 
-def get_dataset(model_type="", split="train"):
+def get_dataset(split="train"):
     """Load data from files, then transform into appropriate
     Dataset objects.
     Args:
@@ -131,23 +203,24 @@ def get_dataset(model_type="", split="train"):
     Return:
         Torch dataset.
     """
-    seq_only = True if model_type == "seq" else False
+#    seq_only = True if model_type == "seq" else False
 
     tokenizer = None
-    if model_type != "struct":
+    #if model_type != "struct":
         # need to add BERT
-        print("Loading BertTokenizer...")
-        tokenizer = BertTokenizer.from_pretrained(
-            "Rostlab/prot_bert", do_lower_case=False
-        )
+    print("Loading BertTokenizer...")
+    tokenizer = BertTokenizer.from_pretrained(
+        "Rostlab/prot_bert", do_lower_case=False
+    )
 
     # Load data from files
    # if task in ("cc", "bp", "mf"):  # GO dataset
         # load labels
-    prot2funsoc, funsocs_amount = load_FunSoc_labels()
+    prot2funsoc, funsocs_amount,pos_weights  = load_FunSoc_labels(split)
     #prot2annot, num_outputs, pos_weights = load_GO_labels(task)
         # load features
-    dataset = load_gvp_data(split=split, seq_only=seq_only)
+    dataset = load_gvp_data(split=split, seq_only=False)
+    dataset= add_labels(dataset, prot2funsoc)
     #add_GO_labels(dataset, prot2annot, go_ont=task)
     #else:
     #    data_dir = {"protease": "protease/with_tags", "flu": "Fluorescence"}
@@ -158,34 +231,32 @@ def get_dataset(model_type="", split="train"):
     #    pos_weights = None
 
     # Convert data into Dataset objects
-    if model_type == "seq":
+   # if model_type == "seq":
         #if num_outputs == 1:
         #    targets = torch.tensor(
         #        [obj["target"] for obj in dataset], dtype=torch.float32
         #    ).unsqueeze(-1)
         #else:
-        targets = [obj["target"] for obj in dataset]
-        dataset = SequenceDatasetWithTarget(
-            [obj["seq"] for obj in dataset],
-            targets,
-            tokenizer=tokenizer,
-            preprocess=True,
-        )
-    else:
+   #     targets = [obj["target"] for obj in dataset]
+   #     dataset = SequenceDatasetWithTarget(
+   #         [obj["seq"] for obj in dataset],
+   #         targets,
+   #         tokenizer=tokenizer,
+   #         preprocess=True,
+   #     )
+   # else:
        # if num_outputs == 1:
             # convert target to f32 [1] tensor
        #     for obj in dataset:
        #         obj["target"] = torch.tensor(
        #             obj["target"], dtype=torch.float32
        #         ).unsqueeze(-1)
-        if model_type == "struct":
-            dataset = ProteinGraphDatasetWithTarget(dataset, preprocess=False)
-        elif model_type == "seq_struct":
-            dataset = preprocess_seqs(tokenizer, dataset)
-            dataset = BertProteinGraphDatasetWithTarget(
-                dataset, preprocess=False
-            )
+    #if model_type == "struct":
+    #        dataset = ProteinGraphDatasetWithTarget(dataset, preprocess=False)
+    #elif model_type == "seq_struct":
+    dataset = preprocess_seqs(tokenizer, dataset)
+    dataset = BertProteinGraphDatasetWithTarget(dataset, preprocess=True)
 
-    #dataset.num_outputs = num_outputs
-    #dataset.pos_weights = pos_weights
+    dataset.num_outputs = funsocs_amount
+    dataset.pos_weights = pos_weights
     return dataset
