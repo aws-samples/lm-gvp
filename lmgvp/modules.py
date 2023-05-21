@@ -41,7 +41,7 @@ def one_hot(index, classes):
 
 
 class FocalLoss(nn.modules.loss._WeightedLoss):
-    def __init__(self, weight=None, gamma=5, reduction='sum'):
+    def __init__(self, weight=None, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__(weight,reduction=reduction)
         self.gamma = gamma
         self.weight = weight #weight parameter will act as the alpha parameter to balance class weights
@@ -53,6 +53,7 @@ class FocalLoss(nn.modules.loss._WeightedLoss):
         focal_loss = ((1 - pt) ** self.gamma * ce_loss).mean()
         return focal_loss
 
+#@torch.compile()
 def _bert_forward(
     bert_model: BertModel,
     embeding_dim: int,
@@ -147,7 +148,7 @@ class BaseModule(pl.LightningModule):
         self.register_buffer("weights", weights)
         self.accuracy = torchmetrics.Accuracy(task="multilabel", num_labels=num_outputs, average=None )
         self.average_precision = torchmetrics.Precision(task="multilabel", num_labels=num_outputs, average=None)
-        self.confusion_matrix = torchmetrics.ConfusionMatrix(task="multilabel", num_labels=num_outputs)
+        self.recall = torchmetrics.Recall(task="multilabel", num_labels=num_outputs, average=None)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -192,28 +193,36 @@ class BaseModule(pl.LightningModule):
                 loss = F.cross_entropy(logits, targets, weight=self.weights)
             else:
                 # multi-label classification
-                loss = F.cross_entropy (logits, targets, self.weights, reduction="sum")
+
+               # loss = F.cross_entropy (logits, targets, reduction="mean",) #self.weights)
                 #F_loss = (1 - pt) ** 5 * BCE_loss
                 #loss= F_loss.sum()
-               #loss_func = FocalLoss()
-               #loss = loss_func(logits, targets)
-                #loss = F.binary_cross_entropy_with_logits(
-                #    logits, targets, reduction="none"
-                #)
-                #loss = (loss * self.weights).mean()
-               # self.accuracy.update(logits, targets)
-                self.average_precision.update(logits, targets.int())
+                #loss_func = FocalLoss()
+                #loss =  loss_func.forward(logits, targets)
+                loss = F.binary_cross_entropy_with_logits(
+                    logits, targets, reduction="mean",# weight=self.weights
+                )
+               # loss = (loss * self.weights).sum()
+                self.accuracy(logits, targets)
+                self.average_precision(logits, targets.int())
+                self.recall(logits, targets.int())
                 # self.log('acc', self.accuracy, on_step=False, on_epoch=True)
-               # myavg = self.accuracy.compute()
+                myavg = self.accuracy.compute()
                 myprec = self.average_precision.compute()
-               # count = 0
-               # for i in myavg:
-               #     count += 1
-               #     self.log("class_average{}".format(count), i)
+                myrecall = self.recall.compute()
+                count = 0
+                for i in myavg:
+                    count += 1
+                    self.log("class_average{}".format(count), i, batch_size=len(logits[0]))
                 count = 0
                 for i in myprec:
                     count += 1
-                    self.log("class_precision{}".format(count), i)
+                    self.log("class_precision{}".format(count), i, batch_size=len(logits[0]))
+                count = 0
+                for i in myrecall:
+                    count += 1
+                    self.log("class_recall{}".format(count), i, batch_size=len(logits[0]))
+
                # self.confusion_matrix(logits, targets.int())
 
                 #print(self.accuracy)
@@ -479,7 +488,6 @@ class BertMQAModel(BaseModule):
         self.W_out = nn.Sequential(
             LayerNorm(node_h_dim), GVP(node_h_dim, (ns, 0))
         )
-
         self.dense = nn.Sequential(
             nn.Linear(ns, 2 * ns),
             nn.ReLU(inplace=True),
@@ -518,7 +526,7 @@ class BertMQAModel(BaseModule):
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
-        self.log("{}_loss".format(prefix), loss)
+        self.log("{}_loss".format(prefix), loss,batch_size=len(x))
         return loss
 
     def forward(self, batch, input_ids=None):
@@ -532,7 +540,6 @@ class BertMQAModel(BaseModule):
         x, targets = batch
         logits = self._forward(x, input_ids=input_ids)
         return logits
-
     def _forward(self, batch, input_ids=None):
         """
         Helper function to perform the forward pass.

@@ -8,8 +8,6 @@ Modified from https://github.com/drorlab/gvp-pytorch/blob/main/gvp/data.py
 import math
 import multiprocessing
 import os
-import threading
-from queue import Queue
 import tqdm
 import numpy as np
 import torch
@@ -76,7 +74,7 @@ class BaseProteinGraphDataset(data.Dataset):
         num_positional_embeddings=16,
         top_k=10,
         num_rbf=16,
-        device="cuda",
+        device="cpu",
         preprocess=True,
     ):
         """
@@ -271,21 +269,21 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
         name = protein["name"]
         input_ids = protein["input_ids"]
         attention_mask = protein["attention_mask"]
-#        with torch.no_grad():
-        coords = torch.as_tensor(
+        with torch.no_grad():
+            coords = torch.as_tensor(
                 protein["coords"], device=self.device, dtype=torch.float32
             )
 
-        mask = torch.isfinite(coords.sum(dim=(1, 2)))
-        coords[~mask] = np.inf
+            mask = torch.isfinite(coords.sum(dim=(1, 2)))
+            coords[~mask] = np.inf
 
-        X_ca = coords[:, 1]
+            X_ca = coords[:, 1]
        # edge_index = torch_cluster.knn_graph(X_ca, k=self.top_k)
-        xs = []
-        p_dist = torch.nn.PairwiseDistance(p=2)
+      #  xs = []
+      #  p_dist = torch.nn.PairwiseDistance(p=2)
            # index1=-1
-        dist = torch.cdist(X_ca, X_ca, p=2)
-        edge_index = (dist<10).nonzero().t()
+            dist = torch.cdist(X_ca, X_ca, p=2)
+            edge_index = (dist < 8).nonzero().t()
       #  [[xs.append(torch.as_tensor([index1, index2], device=self.device)) for index2, x2 in enumerate(X_ca) if index1!=index2 and p_dist(x1,x2) < 10]  for index1, x1 in enumerate(X_ca)]
          #   for x1 in X_ca:
          #       index1 += 1
@@ -299,26 +297,26 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
        # if len(xs) == 0:
        #     raise RuntimeError("no edges")
        # edge_index = torch.stack(xs,dim=0).t()
-        pos_embeddings = self._positional_embeddings(edge_index)
-        E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
-        rbf = _rbf(
+            pos_embeddings = self._positional_embeddings(edge_index)
+            E_vectors = X_ca[edge_index[0]] - X_ca[edge_index[1]]
+            rbf = _rbf(
                 E_vectors.norm(dim=-1),
                 D_count=self.num_rbf,
                 device=self.device,
             )
 
-        dihedrals = self._dihedrals(coords)
-        orientations = self._orientations(X_ca)
-        sidechains = self._sidechains(coords)
+            dihedrals = self._dihedrals(coords)
+            orientations = self._orientations(X_ca)
+            sidechains = self._sidechains(coords)
 
-        node_s = dihedrals
-        node_v = torch.cat(
+            node_s = dihedrals
+            node_v = torch.cat(
                 [orientations, sidechains.unsqueeze(-2)], dim=-2
             )
-        edge_s = torch.cat([rbf, pos_embeddings], dim=-1)
-        edge_v = _normalize(E_vectors).unsqueeze(-2)
+            edge_s = torch.cat([rbf, pos_embeddings], dim=-1)
+            edge_v = _normalize(E_vectors).unsqueeze(-2)
 
-        node_s, node_v, edge_s, edge_v = map(
+            node_s, node_v, edge_s, edge_v = map(
                 torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
             )
 
@@ -334,12 +332,6 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             edge_index=edge_index,
             mask=mask,
         )
-        if index is not None:
-          #  data.share_memory_()
-           # q.put(data)
-            torch.save(data, str(index)+".tmp")
-            #self.queue.append(data)
-            return None
         return data
 
 
@@ -409,20 +401,27 @@ class BertProteinGraphDatasetWithTarget(ProteinGraphDataset):
      #           self.data_list[i]["target"]
      #       )
         started_threads = []
-        for thread in tqdm.tqdm(threads):
+        last_index = 0
+        for index, thread in tqdm.tqdm(enumerate(threads)):
             if len(started_threads )<=os.cpu_count() :
                 thread.start()
                 started_threads.append(thread)
             else:
                 [threads.join() for threads in started_threads]
-
+                for i in range(last_index, index):
+                    self.data_list[i] = (
+                        torch.load(str(i) + ".tmp"),
+                        self.data_list[i]["target"]
+                    )
+                    os.system("rm  " + str(i)+".tmp")
+                last_index = index
                 started_threads = []
-        for i in tqdm.tqdm(range(len(self.data_list))):
-            self.data_list[i] = (
-                       torch.load(str(i)+".tmp"),
-                       self.data_list[i]["target"]
-                   )
-        os.system("rm -r *.tmp")
+      #  for i in tqdm.tqdm(range(len(self.data_list))):
+      #      self.data_list[i] = (
+      #                 torch.load(str(i)+".tmp"),
+      #                 self.data_list[i]["target"]
+      #             )
+      #  os.system("rm -r *.tmp")
       #  [thread.join() for thread in tqdm.tqdm(threads) ]
         #             self._featurize_as_graph(self.data_list[i]),
          #       self.data_list[i]["target"],

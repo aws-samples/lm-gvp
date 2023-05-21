@@ -5,10 +5,9 @@
 Train seq-only, struct-only or seq+struct model on Fluores, protease or GO
 datasets using Pytorch-lightning.
 """
-import finetuning_scheduler
 import os
-import json
 from pprint import pprint
+from torch.utils.data import WeightedRandomSampler
 import argparse
 from collections.abc import Sequence
 import numpy as np
@@ -68,7 +67,7 @@ def init_model(
     pprint(kwargs)
     if model_name in ("bert", "gat", "bert_gat"):
         model = BertGATModel(
-            num_outputs=21,
+            num_outputs=31,
             weights=weights,
             classify=classify,
             **kwargs
@@ -94,50 +93,6 @@ def init_model(
         )
     return model
 
-
-def evaluate(model, data_loader):
-    """Evaluate model on dataset and return metrics.
-
-    Args:
-        datum: a Data object to determine input shapes for GVP-based models.
-        model_name: choose from ['bert', 'gvp', 'bert_gvp', 'gat', 'bert_gat']
-        num_outputs: number of output units
-        weights: label weights for multi-output models
-
-    Returns:
-        model object (One of: bert, gat, bert_gat, gvp or bert_gvp)
-    """
-    # make predictions on test set
-    device = torch.device("cuda:0")
-    model = model.to(device)
-    model.eval()
-    y_preds = []
-    y_true = []
-    with torch.no_grad():
-        for batch in data_loader:
-            if isinstance(batch, Sequence):
-                y_true.append(batch[-1])
-                batch = [b.to(device) for b in batch]
-            else:
-                y_true.append(batch["labels"])
-                batch = {key: val.to(device) for key, val in batch.items()}
-            y_pred = model(batch)
-            if y_pred.ndim == 1:
-                y_pred = y_pred.unsqueeze(1)
-            y_preds.append(y_pred.cpu())
-    y_preds = torch.vstack(y_preds).numpy()
-    y_true = torch.vstack(y_true).numpy()
-    print(y_preds.shape, y_true.shape)
- #   if task in ("cc", "bp", "mf"):
-        # multi-label classification
-    f_max, micro_aupr = deepfrier_utils.evaluate_multilabel(
-        y_true, y_preds
-    )
-    scores = {"f_max": f_max, "aupr": micro_aupr}
-    print("F_max = {:1.3f}".format(scores["f_max"]))
-    print("AUPR = {:1.3f}".format(scores["aupr"]))
-
-
 def main(args):
     """
     Load data, train and evaluate model and save scores. Configuration in the args object.
@@ -156,18 +111,25 @@ def main(args):
     print("Data loaded:", len(train_dataset), len(valid_dataset))
     # 2. Prepare data loaders
     DataLoader = torch_geometric.loader.DataLoader
+    sampler1 = WeightedRandomSampler(train_dataset.sample_weights, len(train_dataset), replacement=True)
+   # sampler2 = WeightedRandomSampler(valid_dataset.sample_weights, len(valid_dataset))
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.bs,
-        shuffle=True,
+        sampler=sampler1,
+      #  shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True
     )
+
+
+
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=args.bs,
-        shuffle=False,
+    #    sampler=sampler2,
+        shuffle=True,
         num_workers=args.num_workers,
         pin_memory=True
     )
@@ -207,7 +169,7 @@ def main(args):
        # deterministic=True,
 
         accelerator='gpu',
-        strategy="ddp",
+        strategy="auto",
         devices=1,
         accumulate_grad_batches=8,
         enable_checkpointing=True,
@@ -218,6 +180,9 @@ def main(args):
 
     )
     # train
+  #  model = torch.compile(model)
+   # model(torch.randn(32,3,32,32))
+   # model.model = torch.compile(model.model)
     trainer.fit(model, train_loader, valid_loader)
     print("Training finished")
     print(
@@ -252,6 +217,7 @@ def main(args):
 
 if __name__ == "__main__":
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:4096,garbage_collection_threshold:0.6"
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     #torch.multiprocessing.set_start_method('spawn', force=True)  # good solution !!!!
     parser = argparse.ArgumentParser()
     # add all the available trainer options to argparse
@@ -268,7 +234,7 @@ if __name__ == "__main__":
   #  temp_args, _ = parser.parse_known_args()
     # add model specific args
  #   model_name = temp_args.model_name
-    parser = BertGATModel.add_model_specific_args(parser)
+    parser = BertMQAModel.add_model_specific_args(parser)
 
     # Additional params
     # dataset params
@@ -299,7 +265,7 @@ if __name__ == "__main__":
     )
     # training hparams
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--bs", type=int, default=2, help="batch size")
+    parser.add_argument("--bs", type=int, default=16, help="batch size")
     parser.add_argument("--early_stopping_patience", type=int, default=3)
     parser.add_argument(
         "--num_workers",

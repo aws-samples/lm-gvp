@@ -103,7 +103,10 @@ def _parse_structure(parser, name, file_path):
     if file_path.endswith(".gz"):
         structure = parser.get_structure(name, gunzip_to_ram(file_path))
     else:  # not gzipped
-        structure = parser.get_structure(name, file_path)
+        try:
+            structure = parser.get_structure(name, file_path)
+        except ValueError as ex:
+            raise ValueError(f"File is empty {file_path} , {ex}")
     return structure
 
 

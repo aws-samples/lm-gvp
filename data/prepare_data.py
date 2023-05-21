@@ -90,7 +90,7 @@ def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
         raise RuntimeError(f"could grab pdb for {struct}")
     output["seq"] = pdb_seq
     #print(pdb_seq)
-    if len(pdb_seq) > 750:
+    if len(pdb_seq) > 1500:
         return
     # get the atom coords
     coords = np.asarray(
@@ -118,7 +118,7 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
         Dictionary with the pdb sequence, atom 3D coordinates and name.
     """
   #  print(sequence)
-   # print(Path(pdb_file_path).name)
+  #  print(Path(pdb_file_path).name)
     #if Path(pdb_file_path).name == "6RWY.pdb":
     #    print("im right here BIIIITIHCHSDHFIUH")
     #    print(sequence)
@@ -126,7 +126,12 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
     #    print("returning nothing")
     #    return
     struct = parse_pdb_structure(parser, sequence, pdb_file_path)
-    record = structure_to_coords(struct, name=name)
+    try:
+        record = structure_to_coords(struct, name=name)
+    except KeyError as ex:
+        raise KeyError(f"Need to fix {name} as {ex}")
+    except RuntimeError as ex:
+        raise RuntimeError(f"Need to fix {pdb_file_path} as {ex}")
     return record
 
 
