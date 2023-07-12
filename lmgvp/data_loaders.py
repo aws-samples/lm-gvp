@@ -4,13 +4,14 @@
 """
 Util functions for loading datasets.
 """
+from pathlib import Path
+
 import numpy
 import os
 import json
 import numpy as np
 import torch
-from transformers import BertTokenizer, BertModel
-
+from transformers import BertTokenizer
 from lmgvp.utils import prep_seq
 from lmgvp.datasets import (
 #    SequenceDatasetWithTarget,
@@ -18,6 +19,9 @@ from lmgvp.datasets import (
     BertProteinGraphDatasetWithTarget,
 )
 from lmgvp.deepfrier_utils import load_GO_annot
+from Commands.Analyze import Analyze
+from  main import main
+from lib.const import SUPPORTED_STRUCTURE_TYPES, AnalysisMode
 
 DATA_ROOT_DIR = "/home/felix/"
 
@@ -59,7 +63,7 @@ def preprocess_seqs(tokenizer, dataset):
         Input dataset with `input_ids` and `attention_mask`
     """
     seqs = [prep_seq(rec["seq"]) for rec in dataset]
-    encodings = tokenizer(seqs, return_tensors="pt", padding=True, truncation=True, max_length=1600)
+    encodings = tokenizer(seqs, return_tensors="pt", padding=True, truncation=True, max_length=2500)
   #  bert = BertModel.from_pretrained("yarongef/DistilProtBert", torch_dtype="auto", ).to("cuda")
 
   #  return node_embeddings    # add input_ids, attention_mask to the json records
@@ -78,37 +82,38 @@ def preprocess_seqs(tokenizer, dataset):
     return dataset
 
 my_dict = {
-    "antibiotic_resistance_repaired":            np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "avirulence_plant_repaired":                 np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "bacterial_counter_signaling_repaired":      np.array([0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "counter_immunoglobin_repaired":             np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "cytotoxicity_repaired":                     np.array([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "degrade_ecm_repaired":                      np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "development_in_host_repaired":              np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "disable_organ_repaired":                    np.array([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_cell_cycle_repaired":                  np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_cell_death_repaired":                  np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_cytoskeleton_repaired":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_GTPase_repaired":                      np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_trancription_repaired":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_translation_repaired":                 np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_ubiquitin_repaired":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "host_xenophagy_repaired":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "induce_inflammation":                       np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "invasion_hostcell_Viral_repaired":          np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "nonviral_invasion_repaired":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "plant_RNA_silencing_viral_repaired":        np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "resist_host_complement_repaired":           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "resist_oxidative_repaired":                 np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "secreted_effector_repaired":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]),
-    "secretion_repaired":                        np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
-    "suppress_detection_repaired":               np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
-    "toxin_synthase_repaired":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
-    "viral_adhesion":                            np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]),
-    "viral_counter_signaling_repaird":           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]),
-    "viral_movement_repaired":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]),
-    "virulence_activity_repaired":               np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]),
-    "virulence_regulator_repaired":              np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+    "antibiotic_resistance":            np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "avirulence_plant":                 np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "bacterial_counter_signaling":      np.array([0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "counter_immunoglobin":             np.array([0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "cytotoxicity":                     np.array([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "degrade_ecm":                      np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "development_in_host":              np.array([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "disable_organ":                    np.array([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_cell_cycle":                  np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_cell_death":                  np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_cytoskeleton":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_GTPase":                      np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_transcription":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_translation":                 np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_ubiquitin":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "host_xenophagy":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "induce_inflammation":              np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "invasion_hostcell_Viral":          np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "nonviral_invasion":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "plant_RNA_silencing_viral":        np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "resist_host_complement":           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "resist_oxidative":                 np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "secreted_effector":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "secretion":                        np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]),
+    "suppress_detection":               np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
+    "toxin_synthase":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
+    "viral_adhesion":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+    "viral_counter_signaling":          np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]),
+    "viral_movement":                   np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]),
+    "virulence_activity":               np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]),
+    "virulence_regulator":              np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]),
+    "nonviral_adhesion":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
 
 }
 def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR)):
@@ -116,7 +121,7 @@ def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_D
     json_of_data = json.load(open(filename))
     prot2funsoc = {}
     funsocs_amount = len(my_dict.keys())
-    classes = open("/media/felix/Research/Data/class_sizes.json","r")
+    classes = open("/home/felix/Data/class_sizes.json","r")
     output = classes.readlines()[0]
     class_weight = numpy.zeros(funsocs_amount).astype("float64")
     classes = json.loads(output)
@@ -128,15 +133,15 @@ def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_D
         count= 0
         for target in rec["target"].replace('[','').replace(']','').split(", "):
             count+=1
-            if count > 2:
-                print(rec["target"])
+       #     if count > 2:
+       #         print(rec["target"])
             targets =  targets + my_dict.get(target.replace("\'",''))
             sample_weights[index] = sample_weights[index] + np.sum(my_dict.get(target.replace("\'",''))*(1/classes[target.replace("\'",'')]))
         if 2 in targets:
-            print(targets)
+         #   print(targets)
             raise RuntimeError("somehow a 2 got in my labels")
         prot2funsoc[rec["name"]] =targets
-    print(sample_weights)
+   # print(sample_weights)
     return prot2funsoc, funsocs_amount, torch.from_numpy(class_weight.astype(np.float32)), torch.from_numpy(sample_weights.astype(np.float32))
 
 def add_labels(dataset, prot2soc):
@@ -152,11 +157,21 @@ def add_labels(dataset, prot2soc):
         Dataset formatted as a list. Where, for each element (dictionary), a `target` field has been added.
 
     """
+    #path: Path = Path("/mnt/ResearchLongTerm/raw_structs/")
+    #for funsocs in os.listdir(path):
+    #    main(path.joinpath(str(funsocs)), 1, SUPPORTED_STRUCTURE_TYPES.PDB) #path.joinpath(funsocs)
+    #    analyze = Analyze(None,AnalysisMode.PLDDT)
+    #    funsoc_dict = analyze.get_go_terms()
+    #    for rec in dataset:
+    #        if funsoc_dict.get(rec["name"]) is not None:
+    #            rec["go_labels"] = torch.from_numpy(
+    #                funsoc_dict[rec["name"]].astype(np.float32)
+    #        )
     for rec in dataset:
-        rec["target"] = torch.from_numpy(
-            prot2soc[rec["name"]].astype(np.float32)
-        )
+        rec["target"] = torch.from_numpy(prot2soc[rec["name"]].astype(np.float32))
     return dataset
+
+
 def load_GO_labels(task="cc"):
     """Load the labels in the GO dataset
 
@@ -223,7 +238,7 @@ def get_dataset(split="train"):
         # need to add BERT
     print("Loading BertTokenizer...")
     tokenizer = BertTokenizer.from_pretrained(
-        "Rostlab/prot_bert", do_lower_case=False
+        "yarongef/DistilProtBert", do_lower_case=False
     )
 
     # Load data from files
@@ -233,7 +248,7 @@ def get_dataset(split="train"):
     #prot2annot, num_outputs, pos_weights = load_GO_labels(task)
         # load features
     dataset = load_gvp_data(split=split, seq_only=False)
-    dataset= add_labels(dataset, prot2funsoc)
+    dataset = add_labels(dataset, prot2funsoc)
     #add_GO_labels(dataset, prot2annot, go_ont=task)
     #else:
     #    data_dir = {"protease": "protease/with_tags", "flu": "Fluorescence"}
@@ -269,7 +284,6 @@ def get_dataset(split="train"):
     #elif model_type == "seq_struct":
     dataset = preprocess_seqs(tokenizer, dataset)
     dataset = BertProteinGraphDatasetWithTarget(dataset, preprocess=False)
-
     dataset.num_outputs = funsocs_amount
     dataset.pos_weights = pos_weights
     dataset.sample_weights = sample_weights

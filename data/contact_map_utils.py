@@ -14,7 +14,8 @@ from Bio import pairwise2
 from Bio.Seq import Seq
 from Bio.PDB.Polypeptide import three_to_one, is_aa
 
-
+import warnings
+warnings.filterwarnings('ignore')
 def idx_align(pdb_seq: str, og_seq: str):
     """Maps indices of original and PDB sequences to mutual alignment
     Args:

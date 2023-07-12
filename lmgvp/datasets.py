@@ -283,7 +283,7 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
       #  p_dist = torch.nn.PairwiseDistance(p=2)
            # index1=-1
             dist = torch.cdist(X_ca, X_ca, p=2)
-            edge_index = (dist < 8).nonzero().t()
+            edge_index = (dist < 10).nonzero().t()
       #  [[xs.append(torch.as_tensor([index1, index2], device=self.device)) for index2, x2 in enumerate(X_ca) if index1!=index2 and p_dist(x1,x2) < 10]  for index1, x1 in enumerate(X_ca)]
          #   for x1 in X_ca:
          #       index1 += 1
@@ -319,7 +319,10 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             node_s, node_v, edge_s, edge_v = map(
                 torch.nan_to_num, (node_s, node_v, edge_s, edge_v)
             )
-
+ #           try:
+ #               protein["go_labels"]
+ #           except:
+ #               print(name)
         data = torch_geometric.data.Data(
             x=X_ca,
             input_ids=input_ids,
@@ -331,6 +334,7 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
             edge_v=edge_v,
             edge_index=edge_index,
             mask=mask,
+#            go_terms=torch.as_tensor(protein["go_labels"], dtype=torch.float32, device=self.device)
         )
         return data
 

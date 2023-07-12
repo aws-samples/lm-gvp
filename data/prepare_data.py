@@ -13,10 +13,9 @@ import os
 import argparse
 from collections import defaultdict
 from pathlib import Path
-
+import pyrosetta as pyr
 import pandas as pd
 import numpy as np
-
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from Bio.PDB import PDBParser
@@ -24,7 +23,10 @@ from Bio.PDB.Polypeptide import three_to_one
 
 import xpdb
 from contact_map_utils import parse_pdb_structure
-
+import warnings
+warnings.filterwarnings('ignore')
+#pyr.init()
+#scorefxn = pyr.get_fa_scorefxn()
 
 def parse_args():
     """Prepare argument parser.
@@ -90,7 +92,7 @@ def structure_to_coords(struct, target_atoms=["N", "CA", "C", "O"], name=""):
         raise RuntimeError(f"could grab pdb for {struct}")
     output["seq"] = pdb_seq
     #print(pdb_seq)
-    if len(pdb_seq) > 1500:
+    if len(pdb_seq) > 2500:
         return
     # get the atom coords
     coords = np.asarray(
@@ -132,6 +134,16 @@ def parse_pdb_gz_to_json_record(parser, sequence, pdb_file_path, name=""):
         raise KeyError(f"Need to fix {name} as {ex}")
     except RuntimeError as ex:
         raise RuntimeError(f"Need to fix {pdb_file_path} as {ex}")
+  #  pyr.init()
+  #  scorefxn = pyr.get_fa_scorefxn()
+  #  pose = pyr.pose_from_pdb(pdb_file_path)
+  #  scorefxn(pose)
+  #  res_ene = pose.energies().residue_total_energies_array()
+  #  print(res_ene.shape)
+  #  try:
+  #      record["energies"] = res_ene
+  #  except TypeError:
+  #      print(f"Fucked up {pdb_file_path}")
     return record
 
 

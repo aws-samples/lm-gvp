@@ -4,18 +4,14 @@
 """
 pl.LightningModules for LM-GVP and other baseline models, modified to support model interpretation
 """
-import tempfile
 import torchmetrics
 from typing import Tuple
-import gc
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from gvp.models import GVP, GVPConvLayer, LayerNorm
 from torch_scatter import scatter_mean
 from transformers import BertModel
 from torch_geometric.nn import GATv2Conv
-import pytorch_lightning as pl
+import lightning as pl
 #torch.set_float32_matmul_precision('medium')
 torch.backends.cuda.matmul.allow_tf32=True
 import torch
@@ -84,7 +80,7 @@ def _bert_forward(
 
 
 def _freeze_bert(
-    bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
+    bert_model: BertModel, freeze_bert=False, freeze_layer_count=-1
 ):
     """Freeze parameters in BertModel (in place)
 
@@ -121,7 +117,7 @@ class BaseModule(pl.LightningModule):
 
     def __init__(
         self,
-        num_outputs=21,
+        num_outputs=32,
         classify=True,
         multiclass=False,
         weights=None,
@@ -146,7 +142,7 @@ class BaseModule(pl.LightningModule):
         self.classify = classify
         self.multiclass = multiclass
         self.register_buffer("weights", weights)
-        self.accuracy = torchmetrics.Accuracy(task="multilabel", num_labels=num_outputs, average=None )
+       # self.accuracy = torchmetrics.Accuracy(task="multilabel", num_labels=num_outputs, average=None )
         self.average_precision = torchmetrics.Precision(task="multilabel", num_labels=num_outputs, average=None)
         self.recall = torchmetrics.Recall(task="multilabel", num_labels=num_outputs, average=None)
 
@@ -203,25 +199,25 @@ class BaseModule(pl.LightningModule):
                     logits, targets, reduction="mean",# weight=self.weights
                 )
                # loss = (loss * self.weights).sum()
-                self.accuracy(logits, targets)
+              #  self.accuracy(logits, targets)
                 self.average_precision(logits, targets.int())
                 self.recall(logits, targets.int())
                 # self.log('acc', self.accuracy, on_step=False, on_epoch=True)
-                myavg = self.accuracy.compute()
+             #   myavg = self.accuracy.compute()
                 myprec = self.average_precision.compute()
                 myrecall = self.recall.compute()
-                count = 0
-                for i in myavg:
-                    count += 1
-                    self.log("class_average{}".format(count), i, batch_size=len(logits[0]))
+              #  count = 0
+              #  for i in myavg:
+              #      count += 1
+              #      self.log("class_average{}".format(count), i, batch_size=len(logits[0]), sync_dist=True)
                 count = 0
                 for i in myprec:
                     count += 1
-                    self.log("class_precision{}".format(count), i, batch_size=len(logits[0]))
+                    self.log("class_precision{}".format(count), i, batch_size=len(logits[0]), sync_dist=True)
                 count = 0
                 for i in myrecall:
                     count += 1
-                    self.log("class_recall{}".format(count), i, batch_size=len(logits[0]))
+                    self.log("class_recall{}".format(count), i, batch_size=len(logits[0]), sync_dist=True)
 
                # self.confusion_matrix(logits, targets.int())
 
@@ -259,6 +255,93 @@ class BaseModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         return self._step(batch, batch_idx, prefix="test")
+class BertFinetuneModel(BaseModule):
+    """Sequence-only baseline: Bert + linear layer on pooler_output"""
+
+    def __init__(self, **kwargs):
+        """Initializes the module
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        super(BertFinetuneModel, self).__init__(**kwargs)
+        self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" )
+        # freeze the embeddings
+        _freeze_bert(self.bert_model, freeze_bert=False, freeze_layer_count=-2)
+        self.dense = nn.Sequential(
+           # nn.Linear(4800, 2048), # changed to 4800 for 2752 go terms
+      #      nn.Linear(4800,n_hidden), #added
+            nn.Linear(self.bert_model.pooler.dense.out_features, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512 ,self.hparams.num_outputs)
+
+       #     nn.Linear(n_hidden, self.hparams.num_outputs),
+        )
+    #    self.output = nn.Linear(
+    #        self.bert_model.pooler.dense.out_features+2752, self.hparams.num_outputs
+    #    )
+
+    def _forward(self, input_ids, attention_mask):#,go):
+        """Helper function to perform the forward pass.
+
+        Args:
+            batch: torch_geometric.data.Data
+            input_ids: IDs of the embeddings to be used in the model.
+            attention_mask: Masking to use durinig BERT's self-attention.
+
+        Returns:
+            logits
+        """
+        x = self.bert_model(
+            input_ids, attention_mask=attention_mask
+        ).pooler_output
+       # x = torch.cat((x, go), dim=-1)
+        #outputs = self.output(x)
+        outputs=self.dense(x)
+        return outputs
+
+    def forward(self, batch):
+        """Performs the forward pass.
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+
+        Returns:
+            logits
+        """
+        batch_size = batch.num_graphs
+       # go = batch["go_terms"].reshape(batch_size, -1)
+        input_ids = batch.input_ids.reshape(batch_size, -1)
+        attention_mask = batch.attention_mask.reshape(batch_size, -1)
+        outputs = self._forward(input_ids, attention_mask)#, go)
+        return outputs
+
+    def _step(self, batch, batch_idx, prefix="train"):
+        """Used in train/validation loop, independent of `forward`
+
+        Args:
+            batch: (torch_geometric.data.Data, targets)
+            batch_idx: index of current batch
+            prefix: Prefix for the loss: XXX_loss (train, validation, test)
+
+        Returns:
+            Loss
+        """
+        x, targets = batch
+        logits = self.forward(x)
+        loss = self._compute_loss(logits, targets)
+        self.log("{}_loss".format(prefix), loss, batch_size=len(x), sync_dist=True)
+        return loss
+       # batch_size = batch.num_graphs
+       # go = batch["go_terms"].reshape(batch_size, -1)
+       # logits = self._forward(batch["input_ids"], batch["attention_mask"], go)
+       # loss = self._compute_loss(logits, batch["labels"])
+       # self.log("{}_loss".format(prefix), loss)
+       # return loss
+
 
 class BertGATModel(BaseModule):
     """Bert + GAT head."""
@@ -267,7 +350,7 @@ class BertGATModel(BaseModule):
         self,
         n_hidden=512,
         drop_rate=0.2,
-        freeze_bert=False,
+        freeze_bert=True,
         freeze_layer_count=-1,
         **kwargs,
     ):
@@ -290,7 +373,7 @@ class BertGATModel(BaseModule):
             "freeze_bert",
             "freeze_layer_count",
         )
-        self.bert_model = BertModel.from_pretrained("Rostlab/prot_bert",torch_dtype="auto" , )
+        self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" , )
         self.embeding_dim = self.bert_model.pooler.dense.out_features
         self.conv1 = GATv2Conv(self.embeding_dim, 128, 4)
         self.conv2 = GATv2Conv(512, 128, 4)
@@ -300,7 +383,8 @@ class BertGATModel(BaseModule):
         self.dropout = nn.Dropout(p=drop_rate)
 
         self.dense = nn.Sequential(
-            nn.Linear(2048, n_hidden),
+           # nn.Linear(4800, 2048), # changed to 4800 for 2752 go terms
+            nn.Linear(2048,n_hidden), #added
             nn.ReLU(inplace=True),
             nn.Linear(n_hidden, self.hparams.num_outputs),
         )
@@ -347,7 +431,7 @@ class BertGATModel(BaseModule):
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
-        self.log("{}_loss".format(prefix), loss, batch_size=len(x))
+        self.log("{}_loss".format(prefix), loss, batch_size=len(x),  sync_dist=True)
 
       #  self.log("class2", myprec[1])
       #  self.log("class3", mypraec[3])
@@ -381,7 +465,7 @@ class BertGATModel(BaseModule):
         batch_size = batch.num_graphs
         input_ids = batch.input_ids.reshape(batch_size, -1)
         attention_mask = batch.attention_mask.reshape(batch_size, -1)
-
+      #  go = batch["go_terms"].reshape(batch_size, -1)
         node_embeddings = _bert_forward(
             self.bert_model, self.embeding_dim, input_ids, attention_mask
         )
@@ -396,10 +480,12 @@ class BertGATModel(BaseModule):
         # residual concat
         out = torch.cat((conv1_out, conv2_out, conv3_out), dim=-1)
         out = self.dropout(self.relu(out))  # [n_nodes, 2048]
+
         # aggregate node vectors to graph
      #   out = out.scatter(out, batch.batch, dim=0)
         out = scatter_mean(out, batch.batch, dim=0)  # [bs, 2048]
-        return self.dense(out).squeeze(-1) + 0.5  # [bs]
+       # out = torch.cat((out, go), dim=-1)
+        return self.dense(out).squeeze(-1)# + 0.5  # [bs]
 
 
 class BertMQAModel(BaseModule):
@@ -453,7 +539,7 @@ class BertMQAModel(BaseModule):
             "residual",
         )
         self.identity = nn.Identity()
-        self.bert_model = BertModel.from_pretrained("Rostlab/prot_bert")
+        self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" )
         self.embeding_dim = self.bert_model.pooler.dense.out_features
         self.residual = residual
         _freeze_bert(
@@ -526,7 +612,7 @@ class BertMQAModel(BaseModule):
         x, targets = batch
         logits = self._forward(x)
         loss = self._compute_loss(logits, targets)
-        self.log("{}_loss".format(prefix), loss,batch_size=len(x))
+        self.log("{}_loss".format(prefix), loss,batch_size=len(x), sync_dist=True)
         return loss
 
     def forward(self, batch, input_ids=None):
@@ -552,6 +638,8 @@ class BertMQAModel(BaseModule):
         h_V = (batch.node_s, batch.node_v)
         h_E = (batch.edge_s, batch.edge_v)
         edge_index = batch.edge_index
+        batch_size = batch.num_graphs
+    #    go = batch["go_terms"].reshape(batch_size, -1)
 
         batch_size = batch.num_graphs
 
@@ -586,4 +674,5 @@ class BertMQAModel(BaseModule):
             out = self.W_out(h_V_out)
 
         out = scatter_mean(out, batch.batch, dim=0)
+     #   out = torch.cat((out, go), dim=-1)
         return self.dense(out).squeeze(-1) + 0.5
