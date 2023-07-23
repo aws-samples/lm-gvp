@@ -11,7 +11,7 @@ from gvp.models import GVP, GVPConvLayer, LayerNorm
 from torch_scatter import scatter_mean
 from transformers import BertModel
 from torch_geometric.nn import GATv2Conv
-import lightning as pl
+import lightning.pytorch as pl
 #torch.set_float32_matmul_precision('medium')
 torch.backends.cuda.matmul.allow_tf32=True
 import torch

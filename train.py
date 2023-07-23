@@ -15,7 +15,7 @@ from pytorch_lightning.strategies import DDPStrategy
 from sklearn import metrics
 from scipy import stats
 from finetuning_scheduler import FinetuningScheduler
-import lightning as L
+import lightning.pytorch as L
 import torch
 import torch_geometric
 import lightning.pytorch as pl
@@ -66,20 +66,20 @@ def init_model(
     print("Init {} model with args:".format("BertGAT"))
     pprint(kwargs)
     if model_name in "bert":
-        model = BertGATModel(
-            num_outputs=32,
+   #     model = BertGATModel(
+   #         num_outputs=32,
+   #         weights=weights,
+   #         classify=classify,
+   #         **kwargs
+   #     )
+    #elif model_name in "bert":
+
+        model = BertFinetuneModel(
+            num_outputs=num_outputs,
             weights=weights,
             classify=classify,
             **kwargs
         )
-    #elif model_name in "bert":
-
-    #    model = BertFinetuneModel(
-    #        num_outputs=num_outputs,
-    #        weights=weights,
-    #        classify=classify,
-    #        **kwargs
-    #    )
     elif model_name in ("gvp", "bert_gvp"):
         node_in_dim = (datum.node_s.shape[1], datum.node_v.shape[1])
         node_h_dim = (kwargs["node_h_dim_s"], kwargs["node_h_dim_v"])
@@ -160,9 +160,9 @@ def main(args):
         load_state_dict_to_model(model, checkpoint["state_dict"])
     # 4. Training
     # callbacks
-   # early_stop_callback = EarlyStopping(
-   #     monitor="val_loss", patience=args.early_stopping_patience
-   # )
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss", patience=args.early_stopping_patience
+    )
     # Init ModelCheckpoint callback, monitoring 'val_loss'
     checkpoint_callback = ModelCheckpoint(monitor="val_loss")
     fine_tune =  FinetuningScheduler()
@@ -177,12 +177,11 @@ def main(args):
 
         #  accelerator='gpu',
         #  strategy="auto",
-        devices=2,
-        accumulate_grad_batches=8,
+        devices=1,
+    #    accumulate_grad_batches=8,
      #   enable_checkpointing=True,
         strategy='ddp_find_unused_parameters_true',
-        callbacks=
-        [fine_tune],#[early_stop_callback, fine_tune],#checkpoint_callback, fine_tune],
+        callbacks= [fine_tune] #[early_stop_callback,checkpoint_callback]
      #   profiler="simple",
      #   benchmark=True,
         # precision=""
@@ -192,18 +191,18 @@ def main(args):
    # model = torch.compile(model, mode="reduce-overhead")
     # model(torch.randn(32,3,32,32))
     # model.model = torch.compile(model.model)
-   # trainer.fit(model, train_loader, valid_loader)
+    trainer.fit(model, train_loader, valid_loader)
    # print("Training finished")
-   # print(
-   #     "checkpoint_callback.best_model_path:",
-   #     checkpoint_callback.best_model_path,
-   # )
+    print(
+        "checkpoint_callback.best_model_path:",
+        checkpoint_callback.best_model_path,
+    )
     # 5. Evaluation
     # load the best model
-  #  model = model.load_from_checkpoint(
-  #      checkpoint_path=checkpoint_callback.best_model_path,
-  #      weights=train_dataset.pos_weights,
-  #  )
+    model = model.load_from_checkpoint(
+        checkpoint_path=checkpoint_callback.best_model_path,
+        weights=train_dataset.pos_weights,
+    )
     print("Testing performance on test set")
     # load test data
 
@@ -235,7 +234,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         type=str,
-        default='gvp',
+        default='bert',
         help="Choose from %s" % ", ".join(list(MODEL_TYPES.keys())),
     )
 
@@ -274,7 +273,7 @@ if __name__ == "__main__":
     )
     # training hparams
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--bs", type=int, default=2, help="batch size")
+    parser.add_argument("--bs", type=int, default=32, help="batch size")
     parser.add_argument("--early_stopping_patience", type=int, default=3)
     parser.add_argument(
         "--num_workers",

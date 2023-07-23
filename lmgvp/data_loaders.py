@@ -19,9 +19,9 @@ from lmgvp.datasets import (
     BertProteinGraphDatasetWithTarget,
 )
 from lmgvp.deepfrier_utils import load_GO_annot
-from Commands.Analyze import Analyze
-from  main import main
-from lib.const import SUPPORTED_STRUCTURE_TYPES, AnalysisMode
+#from Commands.Analyze import Analyze
+#from  main import main
+#from lib.const import SUPPORTED_STRUCTURE_TYPES, AnalysisMode
 
 DATA_ROOT_DIR = "/home/felix/"
 
