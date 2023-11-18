@@ -9,7 +9,7 @@ from typing import Tuple
 import torch
 from gvp.models import GVP, GVPConvLayer, LayerNorm
 from torch_scatter import scatter_mean
-from transformers import BertModel
+from transformers import BertModel, EsmModel
 from torch_geometric.nn import GATv2Conv
 import lightning.pytorch as pl
 #torch.set_float32_matmul_precision('medium')
@@ -268,7 +268,8 @@ class BertFinetuneModel(BaseModule):
             None
         """
         super(BertFinetuneModel, self).__init__(**kwargs)
-        self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" )
+      #  self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" )
+        self.bert_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D",torch_dtype="auto")
         # freeze the embeddings
         _freeze_bert(self.bert_model, freeze_bert=False, freeze_layer_count=-2)
         self.dense = nn.Sequential(

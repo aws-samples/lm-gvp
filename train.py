@@ -9,6 +9,7 @@ import os
 from pprint import pprint
 from torch.utils.data import WeightedRandomSampler
 import argparse
+
 from collections.abc import Sequence
 import numpy as np
 from pytorch_lightning.strategies import DDPStrategy
@@ -191,18 +192,18 @@ def main(args):
    # model = torch.compile(model, mode="reduce-overhead")
     # model(torch.randn(32,3,32,32))
     # model.model = torch.compile(model.model)
-    trainer.fit(model, train_loader, valid_loader)
+   # trainer.fit(model, train_loader, valid_loader)
    # print("Training finished")
-    print(
-        "checkpoint_callback.best_model_path:",
-        checkpoint_callback.best_model_path,
-    )
+   # print(
+   #     "checkpoint_callback.best_model_path:",
+   #     checkpoint_callback.best_model_path,
+   # )
     # 5. Evaluation
     # load the best model
-    model = model.load_from_checkpoint(
-        checkpoint_path=checkpoint_callback.best_model_path,
-        weights=train_dataset.pos_weights,
-    )
+   # model = model.load_from_checkpoint(
+   #     checkpoint_path=checkpoint_callback.best_model_path,
+   #     weights=train_dataset.pos_weights,
+   # )
     print("Testing performance on test set")
     # load test data
 
@@ -260,7 +261,7 @@ if __name__ == "__main__":
         "--node_h_dim_v", type=int, default=16, help="node_h_dim[1] in GVP"
     )
     parser.add_argument(
-        "--edge_h_dim_s", type=int, default=32, help="edge_h_dim[0] in GVP"
+        "--edge_h_dim_s", type=int, default=4, help="edge_h_dim[0] in GVP"
     )
     parser.add_argument(
         "--edge_h_dim_v", type=int, default=1, help="edge_h_dim[1] in GVP"
@@ -273,7 +274,7 @@ if __name__ == "__main__":
     )
     # training hparams
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--bs", type=int, default=32, help="batch size")
+    parser.add_argument("--bs", type=int, default=8, help="batch size")
     parser.add_argument("--early_stopping_patience", type=int, default=3)
     parser.add_argument(
         "--num_workers",

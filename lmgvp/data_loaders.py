@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from transformers import BertTokenizer
 from lmgvp.utils import prep_seq
+from transformers import AutoTokenizer
 from lmgvp.datasets import (
 #    SequenceDatasetWithTarget,
 #    ProteinGraphDatasetWithTarget,
@@ -236,11 +237,11 @@ def get_dataset(split="train"):
     tokenizer = None
     #if model_type != "struct":
         # need to add BERT
-    print("Loading BertTokenizer...")
-    tokenizer = BertTokenizer.from_pretrained(
-        "yarongef/DistilProtBert", do_lower_case=False
-    )
-
+    print("Loading Tokenizer...")
+ #   tokenizer = BertTokenizer.from_pretrained(
+ #       "yarongef/DistilProtBert", do_lower_case=False
+ #   )
+    tokenizer = AutoTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
     # Load data from files
    # if task in ("cc", "bp", "mf"):  # GO dataset
         # load labels
