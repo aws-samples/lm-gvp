@@ -1,7 +1,7 @@
 biopython==1.79
 captum==0.4.0
 pytorch-lightning==1.3.8
-transformers==4.2.2
+transformers==4.36.0
 torch==1.8.1
 torch-cluster==1.5.9
 torch-geometric==1.7.0
