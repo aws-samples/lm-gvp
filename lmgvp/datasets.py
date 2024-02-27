@@ -269,6 +269,12 @@ class ProteinGraphDataset(BaseProteinGraphDataset):
         name = protein["name"]
         input_ids = protein["input_ids"]
         attention_mask = protein["attention_mask"]
+        #adding sequence context
+       # input_ids = torch.cat((protein["related_sequences"]["input_ids"].flatten(),  input_ids))
+       # attention_mask = torch.cat((protein["related_sequences"]["attention_mask"].flatten(),  attention_mask))
+        #for protein_sequence in protein["related_sequences"]:
+
+
         with torch.no_grad():
             coords = torch.as_tensor(
                 protein["coords"], device=self.device, dtype=torch.float32

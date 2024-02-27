@@ -46,7 +46,7 @@ MODEL_CONSTRUCTORS = {
 
 def init_model(
         datum=None,
-        model_name="gvp",
+        model_name="bert",
         num_outputs=32,
         classify=True,
         weights=None,
@@ -192,18 +192,18 @@ def main(args):
    # model = torch.compile(model, mode="reduce-overhead")
     # model(torch.randn(32,3,32,32))
     # model.model = torch.compile(model.model)
-   # trainer.fit(model, train_loader, valid_loader)
-   # print("Training finished")
-   # print(
-   #     "checkpoint_callback.best_model_path:",
-   #     checkpoint_callback.best_model_path,
-   # )
+    trainer.fit(model, train_loader, valid_loader)
+    print("Training finished")
+    print(
+        "checkpoint_callback.best_model_path:",
+        checkpoint_callback.best_model_path,
+    )
     # 5. Evaluation
     # load the best model
-   # model = model.load_from_checkpoint(
-   #     checkpoint_path=checkpoint_callback.best_model_path,
-   #     weights=train_dataset.pos_weights,
-   # )
+    model = model.load_from_checkpoint(
+        checkpoint_path=checkpoint_callback.best_model_path,
+        weights=train_dataset.pos_weights,
+    )
     print("Testing performance on test set")
     # load test data
 
@@ -273,8 +273,8 @@ if __name__ == "__main__":
         help="path to pretrained weights (such as GAE) to initialize model",
     )
     # training hparams
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--bs", type=int, default=8, help="batch size")
+    parser.add_argument("--lr", type=float, default=1e-2, help="learning rate")
+    parser.add_argument("--bs", type=int, default=1, help="batch size")
     parser.add_argument("--early_stopping_patience", type=int, default=3)
     parser.add_argument(
         "--num_workers",

@@ -7,9 +7,11 @@ DeepFRI paper.
 GO datasets was downloaded from:
 https://github.com/flatironinstitute/DeepFRI/tree/master/preprocessing/data
 """
+import threading
 
 import json
 import os
+from Bio import SeqIO
 from functools import reduce
 import pandas as pd
 import numpy as np
@@ -18,16 +20,43 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from Bio.PDB import PDBParser, MMCIFParser
 from Bio.PDB.Polypeptide import is_aa
+import dask.dataframe as df
 
 from contact_map_utils import (
     parse_structure,
     three_to_one_standard,
 )
 import xpdb
+from lib.const import ALPHA_FOLD_STRUCTURE_EXT, ALPHA_FOLD_PAE_EXT
+from query import AlphaFoldQuery
 
 DATA_DIR = "/home/ec2-user/SageMaker/efs/paper_data/DeepFRI_GO_PDB"
 OUTPUT_DIR = "/home/ec2-user/SageMaker/efs/gvp-datasets/DeepFRI_GO"
 
+
+def get_structure_alignments(sequence_list: str, working_directory):
+    complete_dataframe: df.DataFrame = df.read_csv("~/.config/structcompare/data/accession_ids.csv", header=None)
+    # uniprot_id_strs = [uniprot.id for uniprot in self._uniprot_id_query_list]
+    queried_dataframe: df.DataFrame = complete_dataframe[complete_dataframe[0].apply(lambda x: x in sequence_list)]
+    queried_dataframe = queried_dataframe.compute()
+    threads = [(threading.Thread(target=AlphaFoldQuery(working_directory.joinpath(accession)).query,
+                                 args=[alpha_fold_model_name + ALPHA_FOLD_STRUCTURE_EXT % version + ".pdb"])
+                , threading.Thread(target=AlphaFoldQuery(working_directory.joinpath(accession)).query,
+                                   args=[alpha_fold_model_name + ALPHA_FOLD_PAE_EXT % version]))
+               for accession, alpha_fold_model_name, version in
+               zip(queried_dataframe[0], queried_dataframe[3], queried_dataframe[4])]
+    [(thread[0].start(), thread[1].start()) for thread in threads]
+    [(thread[0].join(), thread[1].join()) for thread in threads]
+    sequences = []
+    for accession in sequence_list:
+        pdb_parser = SeqIO.parse(working_directory.joinpath(accession), "pdb-atom")
+        sequence = ""
+        for record in pdb_parser:
+            sequence += record.seq
+        sequences.append(sequence)
+    return sequences
+
+    #SeqIO.(working_directory.joinpath(query_structure_entry),"pdb")
 
 def get_atom_coords(residue, target_atoms=["N", "CA", "C", "O"]):
     """Extract the coordinates of the target_atoms from an AA residue.

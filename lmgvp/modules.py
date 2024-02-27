@@ -271,7 +271,7 @@ class BertFinetuneModel(BaseModule):
       #  self.bert_model = BertModel.from_pretrained("yarongef/DistilProtBert",torch_dtype="auto" )
         self.bert_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D",torch_dtype="auto")
         # freeze the embeddings
-        _freeze_bert(self.bert_model, freeze_bert=False, freeze_layer_count=-2)
+        _freeze_bert(self.bert_model, freeze_bert=False, freeze_layer_count=-2 )
         self.dense = nn.Sequential(
            # nn.Linear(4800, 2048), # changed to 4800 for 2752 go terms
       #      nn.Linear(4800,n_hidden), #added

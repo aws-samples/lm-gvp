@@ -28,7 +28,7 @@ DATA_ROOT_DIR = "/home/felix/"
 
 
 def load_gvp_data(
-    gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR),
+    gvp_data_dir="{}/gvp-datasets2".format(DATA_ROOT_DIR),
     split="train",
     seq_only=False,
 ):
@@ -63,15 +63,38 @@ def preprocess_seqs(tokenizer, dataset):
     Return:
         Input dataset with `input_ids` and `attention_mask`
     """
-    seqs = [prep_seq(rec["seq"]) for rec in dataset]
-    encodings = tokenizer(seqs, return_tensors="pt", padding=True, truncation=True, max_length=2500)
+    sequences = []
+    for rec in dataset:
+        seq = ""
+        if len(rec["related_sequences"]) > 0:
+            related_seqs = [item[2] for item in rec["related_sequences"]]
+            related_seqs.append(rec["seq"])
+            seq = ' '.join(related_seqs)
+        else:
+            seq = rec["seq"]
+        sequences.append(seq)
+           # for sequence in rec["related_sequences"]:
+           #     if len(seq) < 1:
+           #         seq= seq.join(sequence[2])
+           #     else:
+           #         seq= seq.join(" "+sequence[2])
+          #  seq = seq.join(" " + rec["seq"])
+        #else:
+        #    seq=seq.join(rec["seq"])
+        #sequences.append(seq)
+    # for graph stuff
+    #seqs = [prep_seq(rec["seq"]) for rec in dataset]
+    encodings = tokenizer(sequences, return_tensors="pt", padding=True, truncation=True, max_length=7700)
   #  bert = BertModel.from_pretrained("yarongef/DistilProtBert", torch_dtype="auto", ).to("cuda")
-
   #  return node_embeddings    # add input_ids, attention_mask to the json records
     for i, rec in enumerate(dataset):
         rec["input_ids"] = encodings["input_ids"][i]
         rec["attention_mask"] = encodings["attention_mask"][i]
-     #   node_embeddings = bert(
+     #   related_seqs = [prep_seq(item[2]) for item in rec["related_sequences"]]
+     #   if len(related_seqs) > 0:
+     #       related_encodings = tokenizer(related_seqs, return_tensors="pt", padding=True, truncation=True, max_length=2500)
+     #   rec["related_sequences"] = related_encodings
+    #   node_embeddings = bert(
      #       encodings["input_ids"][i].unsqueeze(-2), attention_mask=encodings["attention_mask"][i].unsqueeze(-2)
      #   ).last_hidden_state[:, 1:-1, :]
      #   attention_masks_1d = encodings["attention_mask"][i][:, 2:].reshape(-1)
@@ -117,7 +140,7 @@ my_dict = {
     "nonviral_adhesion":                np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
 
 }
-def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_DIR)):
+def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets2".format(DATA_ROOT_DIR)):
     filename = os.path.join(gvp_data_dir, f"proteins_{split}.json")
     json_of_data = json.load(open(filename))
     prot2funsoc = {}
@@ -139,7 +162,8 @@ def load_FunSoc_labels( split, gvp_data_dir="{}/gvp-datasets".format(DATA_ROOT_D
             targets =  targets + my_dict.get(target.replace("\'",''))
             sample_weights[index] = sample_weights[index] + np.sum(my_dict.get(target.replace("\'",''))*(1/classes[target.replace("\'",'')]))
         if 2 in targets:
-         #   print(targets)
+            print(targets)
+            print(rec)
             raise RuntimeError("somehow a 2 got in my labels")
         prot2funsoc[rec["name"]] =targets
    # print(sample_weights)
