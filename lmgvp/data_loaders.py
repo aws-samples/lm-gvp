@@ -4,15 +4,12 @@
 """
 Util functions for loading datasets.
 """
-from pathlib import Path
 
 import numpy
 import os
 import json
 import numpy as np
 import torch
-from transformers import BertTokenizer
-from lmgvp.utils import prep_seq
 from transformers import AutoTokenizer
 from lmgvp.datasets import (
 #    SequenceDatasetWithTarget,

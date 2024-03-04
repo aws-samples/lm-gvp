@@ -22,7 +22,7 @@ from Bio.PDB import PDBParser, MMCIFParser
 from Bio.PDB.Polypeptide import is_aa
 import dask.dataframe as df
 
-from contact_map_utils import (
+from data.contact_map_utils import (
     parse_structure,
     three_to_one_standard,
 )

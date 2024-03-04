@@ -7,7 +7,6 @@ generate json records compatible to the LM-GVP model.
 
 This script is intended for Fluorescence and Protease datasets from TAPE.
 """
-import logging
 
 import threading
 
@@ -18,16 +17,14 @@ from collections import defaultdict
 
 from Bio import SeqIO
 from pathlib import Path
-import pyrosetta as pyr
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from Bio.PDB import PDBParser
 from Bio.PDB.Polypeptide import three_to_one
-from dask import dataframe
 import xpdb
-from contact_map_utils import parse_pdb_structure
+from data.contact_map_utils import parse_pdb_structure
 import warnings
 
 warnings.filterwarnings('ignore')
